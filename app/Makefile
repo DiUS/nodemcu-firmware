@@ -61,7 +61,7 @@ ifeq ($(FLAVOR),release)
     TARGET_LDFLAGS += -Os
 endif
 
-LD_FILE = $(LDDIR)/eagle.app.v6.ld
+LD_FILE ?= $(LDDIR)/eagle.app.v6.ld
 
 ifeq ($(APP), 1)
 	LD_FILE = $(LDDIR)/eagle.app.v6.app1.ld
@@ -69,6 +69,10 @@ endif
 
 ifeq ($(APP), 2)
 	LD_FILE = $(LDDIR)/eagle.app.v6.app2.ld
+endif
+
+ifeq ($(MAKE_BOOTLOADER), 1)
+	LD_FILE = $(LDDIR)/eagle.app.v6.bootloader.ld
 endif
 
 COMPONENTS_eagle.app.v6 = \

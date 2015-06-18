@@ -1,5 +1,7 @@
 // Module for interfacing with timer
 
+#define INIT __attribute__ ((section (".text")))
+
 //#include "lua.h"
 #include "lualib.h"
 #include "lauxlib.h"
@@ -8,6 +10,10 @@
 #include "lrotable.h"
 
 #include "c_types.h"
+#include "main.h"
+
+#include "rtcmem.h"
+#include "rtctime.h"
 
 static os_timer_t alarm_timer[NUM_TMR];
 static int alarm_timer_cb_ref[NUM_TMR] = {LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF};
@@ -178,13 +184,206 @@ static int tmr_time( lua_State* L )
 {
   uint32_t local = rtc_10ms;
   lua_pushinteger( L, ((uint32_t)(local/100)) & 0x7FFFFFFF );
-  return 1; 
+  return 1;
 }
+
+static int tmr_gettimeofday( lua_State* L )
+{
+  struct rtc_timeval tv;
+  rtc_gettimeofday(&tv);
+
+  lua_pushinteger( L, tv.tv_sec);
+  lua_pushinteger( L, tv.tv_usec);
+  return 2;
+}
+
+static inline void memw(void)
+{
+  asm volatile ("memw");
+}
+
+static int tmr_writemem( lua_State* L )
+{
+  uint32_t addr=luaL_checkinteger( L, 1 );
+  uint32_t val=luaL_checkinteger( L, 2 );
+
+  memw();
+  *((volatile uint32_t*)addr)=val;
+  memw();
+  uint32_t back=*((volatile uint32_t*)addr);
+  memw();
+  lua_pushinteger( L, back);
+  return 1;
+}
+
+static int tmr_readmem( lua_State* L )
+{
+  uint32_t addr=luaL_checkinteger( L, 1 );
+  memw();
+  uint32_t back=*((volatile uint32_t*)addr);
+  memw();
+  lua_pushinteger( L, back);
+
+  return 1;
+}
+
+
+static int tmr_setled( lua_State* L )
+{
+  uint32_t state=luaL_checkinteger( L, 1 );
+  if (state)
+    gpio_output_set(BIT12,0,BIT12,0);
+  else
+    gpio_output_set(0,BIT12,BIT12,0);
+
+  return 0;
+}
+
+static int tmr_settimeofday( lua_State* L )
+{
+  struct rtc_timeval tv={
+    .tv_sec=luaL_checkinteger( L, 1 ),
+    .tv_usec=luaL_checkinteger( L, 2 )
+  };
+  rtc_settimeofday(&tv);
+  return 0;
+}
+
+static int tmr_getsample( lua_State* L)
+{
+  sample_t s;
+
+  if (!rtc_fifo_pop_sample(&s))
+    return 0;
+
+  lua_pushinteger( L, s.timestamp);
+
+  uint32_t divisor=rtc_tag_to_divisor(s.tag);
+  lua_pushnumber( L, (lua_Number)s.value/(lua_Number)divisor);
+
+  uint8_t tag[5];
+  memset(tag,0,sizeof(tag));
+  rtc_tag_to_string(s.tag,tag);
+  lua_pushstring( L, tag);
+
+  return 3;
+}
+
+static int tmr_peeksample( lua_State* L)
+{
+  sample_t s;
+
+  uint32_t offset=luaL_checkinteger( L, 1 );
+  if (!rtc_fifo_peek_sample(&s,offset))
+    return 0;
+
+  lua_pushinteger( L, s.timestamp);
+
+  uint32_t divisor=rtc_tag_to_divisor(s.tag);
+  lua_pushnumber( L, (lua_Number)s.value/(lua_Number)divisor);
+
+  uint8_t tag[5];
+  memset(tag,0,sizeof(tag));
+  rtc_tag_to_string(s.tag,tag);
+  lua_pushstring( L, tag);
+
+  return 3;
+}
+
+static int tmr_dropsamples( lua_State* L)
+{
+  uint32_t offset=luaL_checkinteger( L, 1 );
+  rtc_fifo_drop_samples(offset);
+  return 0;
+}
+
+
+static int tmr_checkmagic( lua_State* L)
+{
+  lua_pushinteger( L, rtc_check_magic());
+  return 1;
+}
+
+static int tmr_ccount( lua_State* L)
+{
+  lua_pushinteger( L, xthal_get_ccount());
+  return 1;
+}
+
+
+
+static int tmr_test( lua_State* L )
+{
+  uint32_t data=system_rtc_clock_cali_proc();
+  uint32_t data2=dius_rtc_cali();
+
+  lua_pushinteger( L, data);
+  lua_pushinteger( L, data2);
+  return 2;
+}
+
+static int tmr_prepare( lua_State* L )
+{
+  uint32_t us=luaL_checkinteger( L, 1 );
+  uint32_t spb=luaL_checkinteger( L, 2 );
+  rtc_dius_prepare(spb,us);
+
+  return 0;
+}
+
+static int tmr_disprepare( lua_State* L )
+{
+  rtc_dius_disprepare();
+
+  return 0;
+}
+
+static int tmr_have_time(lua_State* L )
+{
+  uint32_t data=rtc_have_time();
+
+  lua_pushinteger( L, data);
+  return 1;
+}
+
+static int tmr_request_samples( lua_State* L )
+{
+  uint32_t spb=luaL_checkinteger( L, 1 );
+  rtc_put_samples_to_take(spb);
+
+  return 0;
+}
+
+static int tmr_reload_requested_samples( lua_State* L )
+{
+  rtc_restart_samples_to_take();
+
+  return 0;
+}
+
+static int tmr_deep_sleep( lua_State* L )
+{
+  uint32_t us=luaL_checkinteger( L, 1 );
+  // rtc_invalidate_calibration();
+  rtc_deep_sleep_us(us);
+
+  return 0;
+}
+
+static int tmr_sleep_to_sample( lua_State* L )
+{
+  uint32_t us=luaL_checkinteger( L, 1 );
+
+  // rtc_invalidate_calibration();
+  rtc_deep_sleep_until_sample(us);
+  return 0;
+}
+
 
 // Module function map
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h"
-const LUA_REG_TYPE tmr_map[] = 
+const LUA_REG_TYPE tmr_map[] =
 {
   { LSTRKEY( "delay" ), LFUNCVAL( tmr_delay ) },
   { LSTRKEY( "now" ), LFUNCVAL( tmr_now ) },
@@ -192,6 +391,27 @@ const LUA_REG_TYPE tmr_map[] =
   { LSTRKEY( "stop" ), LFUNCVAL( tmr_stop ) },
   { LSTRKEY( "wdclr" ), LFUNCVAL( tmr_wdclr ) },
   { LSTRKEY( "time" ), LFUNCVAL( tmr_time ) },
+
+  { LSTRKEY( "rm" ), LFUNCVAL( tmr_readmem ) },
+  { LSTRKEY( "wm" ), LFUNCVAL( tmr_writemem) },
+  { LSTRKEY( "ccount" ), LFUNCVAL( tmr_ccount) },
+  { LSTRKEY( "setled" ), LFUNCVAL( tmr_setled) },
+  { LSTRKEY( "test" ), LFUNCVAL( tmr_test) },
+
+  { LSTRKEY( "gettimeofday" ), LFUNCVAL( tmr_gettimeofday ) },
+  { LSTRKEY( "settimeofday" ), LFUNCVAL( tmr_settimeofday ) },
+
+  { LSTRKEY( "prepare" ), LFUNCVAL( tmr_prepare) },
+  { LSTRKEY( "disprepare" ), LFUNCVAL( tmr_disprepare) },
+  { LSTRKEY( "deep_sleep" ), LFUNCVAL( tmr_deep_sleep) },
+  { LSTRKEY( "request_samples" ), LFUNCVAL( tmr_request_samples) },
+  { LSTRKEY( "reload_requested_samples" ), LFUNCVAL( tmr_reload_requested_samples) },
+  { LSTRKEY( "sleep_to_sample" ), LFUNCVAL( tmr_sleep_to_sample) },
+  { LSTRKEY( "getsample" ), LFUNCVAL( tmr_getsample) },
+  { LSTRKEY( "peeksample" ), LFUNCVAL( tmr_peeksample) },
+  { LSTRKEY( "dropsamples" ), LFUNCVAL( tmr_dropsamples) },
+  { LSTRKEY( "check_magic" ), LFUNCVAL( tmr_checkmagic) },
+  { LSTRKEY( "have_time" ), LFUNCVAL( tmr_have_time) },
 #if LUA_OPTIMIZE_MEMORY > 0
 
 #endif

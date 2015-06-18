@@ -5,7 +5,7 @@ MEMORY
   dport0_0_seg :                      	org = 0x3FF00000, len = 0x10
   dram0_0_seg :                       	org = 0x3FFE8000, len = 0x14000
   iram1_0_seg :                       	org = 0x40100000, len = 0x8000
-  irom0_0_seg :                       	org = 0x40210000, len = 0x60000
+  irom0_0_seg :                       	org = 0x402b0000, len = 0x50000
 }
 
 PHDRS
@@ -19,7 +19,8 @@ PHDRS
 
 
 /*  Default entry point:  */
-ENTRY(call_user_start)
+/* ENTRY(call_user_start) */
+ENTRY(startup_bernie)
 PROVIDE(_memmap_vecbase_reset = 0x40000000);
 /* Various memory-map dependent cache attribute settings: */
 _memmap_cacheattr_wb_base = 0x00000110;
@@ -66,6 +67,44 @@ SECTIONS
     _dport0_data_end = ABSOLUTE(.);
   } >dport0_0_seg :dport0_0_phdr
 
+  .rodata : ALIGN(4)
+  {
+    _rodata_start = ABSOLUTE(.);
+    *(.rodata)
+    *(.rodata.*) 
+    *(.gnu.linkonce.r.*)
+    *(.rodata1)
+    __XT_EXCEPTION_TABLE__ = ABSOLUTE(.);
+    *(.xt_except_table)
+    *(.gcc_except_table)
+    *(.gnu.linkonce.e.*)
+    *(.gnu.version_r)
+    *(.eh_frame)
+    /*  C++ constructor and destructor tables, properly ordered:  */
+    KEEP (*crtbegin.o(.ctors))
+    KEEP (*(EXCLUDE_FILE (*crtend.o) .ctors))
+    KEEP (*(SORT(.ctors.*)))
+    KEEP (*(.ctors))
+    KEEP (*crtbegin.o(.dtors))
+    KEEP (*(EXCLUDE_FILE (*crtend.o) .dtors))
+    KEEP (*(SORT(.dtors.*)))
+    KEEP (*(.dtors))
+    /*  C++ exception handlers table:  */
+    __XT_EXCEPTION_DESCS__ = ABSOLUTE(.);
+    *(.xt_except_desc)
+    *(.gnu.linkonce.h.*)
+    __XT_EXCEPTION_DESCS_END__ = ABSOLUTE(.);
+    *(.xt_except_desc_end)
+    *(.dynamic)
+    *(.gnu.version_d)
+    . = ALIGN(4);		/* this table MUST be 4-byte aligned */
+    _bss_table_start = ABSOLUTE(.);
+    LONG(_bss_start)
+    LONG(_bss_end)
+    _bss_table_end = ABSOLUTE(.);
+    _rodata_end = ABSOLUTE(.);
+  } >dram0_0_seg :dram0_0_phdr
+
   .irom0.text : ALIGN(4)
   {
     _irom0_text_start = ABSOLUTE(.);
@@ -75,7 +114,6 @@ SECTIONS
 
     /* put font and progmem data into irom0 */
     *(.u8g_progmem.*)
-
     _irom0_text_end = ABSOLUTE(.);
     _flash_used_end = ABSOLUTE(.);
   } >irom0_0_seg :irom0_0_phdr
@@ -122,43 +160,6 @@ SECTIONS
     _data_end = ABSOLUTE(.);
   } >dram0_0_seg :dram0_0_phdr
 
-  .rodata : ALIGN(4)
-  {
-    _rodata_start = ABSOLUTE(.);
-    *(.rodata)
-    *(.rodata.*)
-    *(.gnu.linkonce.r.*)
-    *(.rodata1)
-    __XT_EXCEPTION_TABLE__ = ABSOLUTE(.);
-    *(.xt_except_table)
-    *(.gcc_except_table)
-    *(.gnu.linkonce.e.*)
-    *(.gnu.version_r)
-    *(.eh_frame)
-    /*  C++ constructor and destructor tables, properly ordered:  */
-    KEEP (*crtbegin.o(.ctors))
-    KEEP (*(EXCLUDE_FILE (*crtend.o) .ctors))
-    KEEP (*(SORT(.ctors.*)))
-    KEEP (*(.ctors))
-    KEEP (*crtbegin.o(.dtors))
-    KEEP (*(EXCLUDE_FILE (*crtend.o) .dtors))
-    KEEP (*(SORT(.dtors.*)))
-    KEEP (*(.dtors))
-    /*  C++ exception handlers table:  */
-    __XT_EXCEPTION_DESCS__ = ABSOLUTE(.);
-    *(.xt_except_desc)
-    *(.gnu.linkonce.h.*)
-    __XT_EXCEPTION_DESCS_END__ = ABSOLUTE(.);
-    *(.xt_except_desc_end)
-    *(.dynamic)
-    *(.gnu.version_d)
-    . = ALIGN(4);		/* this table MUST be 4-byte aligned */
-    _bss_table_start = ABSOLUTE(.);
-    LONG(_bss_start)
-    LONG(_bss_end)
-    _bss_table_end = ABSOLUTE(.);
-    _rodata_end = ABSOLUTE(.);
-  } >dram0_0_seg :dram0_0_phdr
 
   .bss ALIGN(8) (NOLOAD) : ALIGN(4)
   {

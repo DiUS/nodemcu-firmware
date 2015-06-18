@@ -62,6 +62,41 @@ static int node_deepsleep( lua_State* L )
   return 0;
 }
 
+static int node_writertc( lua_State* L )
+{
+  if (!(lua_isnumber(L, 1) && lua_isnumber(L, 2)))
+    return luaL_error( L, "wrong arg range" );
+
+  u32 addr = lua_tointeger(L, 1);
+  u32 val = lua_tointeger(L, 2);
+  if (!system_rtc_mem_write(64+addr,&val,4))
+    return luaL_error( L, "write failed" );
+  return 0;
+}
+
+static int node_readrtc( lua_State* L )
+{
+  if (!lua_isnumber(L, 1))
+    return luaL_error( L, "wrong arg range" );
+
+  u32 addr = lua_tointeger(L, 1);
+  u32 val;
+
+  if (!system_rtc_mem_read(64+addr,&val,4))
+    return luaL_error( L, "read failed" );
+  lua_pushinteger(L, val);
+  return 1;
+}
+
+static int node_dsleep1820( lua_State* L )
+{
+  u32 with_radio = lua_tointeger(L, 1);
+  u32 immediate  = lua_tointeger(L, 2);
+  u32 min_sleep  = lua_tointeger(L, 3);
+  enter_1820_deep_sleep(with_radio?1:0, immediate?1:0, min_sleep);
+  return 0;
+}
+
 // Lua: dsleep_set_options
 // Combined to dsleep( us, option )
 // static int node_deepsleep_setoption( lua_State* L )
@@ -421,6 +456,10 @@ const LUA_REG_TYPE node_map[] =
 {
   { LSTRKEY( "restart" ), LFUNCVAL( node_restart ) },
   { LSTRKEY( "dsleep" ), LFUNCVAL( node_deepsleep ) },
+  { LSTRKEY( "writertc" ), LFUNCVAL( node_writertc ) },
+  { LSTRKEY( "readrtc" ), LFUNCVAL( node_readrtc ) },
+  { LSTRKEY( "dsleep1820" ), LFUNCVAL( node_dsleep1820 ) },
+
   { LSTRKEY( "info" ), LFUNCVAL( node_info ) },
   { LSTRKEY( "chipid" ), LFUNCVAL( node_chipid ) },
   { LSTRKEY( "flashid" ), LFUNCVAL( node_flashid ) },

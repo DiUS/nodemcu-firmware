@@ -332,7 +332,7 @@ class ESPFirmwareImage:
         align = 15-(f.tell() % 16)
         f.seek(align, 1)
         f.write(struct.pack('B', checksum))
-
+        
 
 class ELFFile:
 
@@ -437,6 +437,11 @@ if __name__ == '__main__':
             help = 'Dump headers from an application image')
     parser_image_info.add_argument('filename', help = 'Image file to parse')
 
+    parser_image_dump = subparsers.add_parser(
+            'image_dump',
+            help = 'Dump headers and content from an application image')
+    parser_image_dump.add_argument('filename', help = 'Image file to parse')
+    
     parser_make_image = subparsers.add_parser(
             'make_image',
             help = 'Create an application image from binary files')
@@ -480,7 +485,7 @@ if __name__ == '__main__':
 
     # Create the ESPROM connection object, if needed
     esp = None
-    if args.operation not in ('image_info','make_image','elf2image'):
+    if args.operation not in ('image_info','image_dump','make_image','elf2image'):
         esp = ESPROM(args.port, args.baud)
         esp.connect()
 
@@ -569,6 +574,13 @@ if __name__ == '__main__':
         print
         print 'Checksum: %02x (%s)' % (image.checksum, 'valid' if image.checksum == checksum else 'invalid!')
 
+    elif args.operation == 'image_dump':
+        image = ESPFirmwareImage(args.filename)
+        for (idx, (offset, size, data)) in enumerate(image.segments):
+            hexdata= ",".join("0x{:02x}".format(ord(c)) for c in data)
+            print '   {.offset=0x%08x, .size=%d,' % (offset,size)
+            print '    .data={%s}},' % (hexdata)
+        
     elif args.operation == 'make_image':
         image = ESPFirmwareImage()
         if len(args.segfile) == 0:
@@ -585,24 +597,42 @@ if __name__ == '__main__':
         if args.output is None:
             args.output = args.input + '-'
         e = ELFFile(args.input)
+
+        # Boot loader 
+#        image = ESPFirmwareImage()
+#        image.entrypoint = e.get_symbol_addr("simple_boot")
+#        for section, start in ((".bootloader", "_bootloader_start"),
+#                               (".bootloader.rodata", "_bootloader_rodata_start")):
+#            data = e.load_section(section)
+#            image.add_segment(e.get_symbol_addr(start), data)
+#        image.flash_mode = {'qio':0, 'qout':1, 'dio':2, 'dout': 3}[args.flash_mode]
+#        image.flash_size_freq = {'4m':0x00, '2m':0x10, '8m':0x20, '16m':0x30, '32m':0x40}[args.flash_size]
+#        image.flash_size_freq += {'40m':0, '26m':1, '20m':2, '80m': 0xf}[args.flash_freq]
+#        image.save(args.output + "0x00000.bin")
+
+        # Actual nodemcu firmware
         image = ESPFirmwareImage()
         image.entrypoint = e.get_symbol_addr("call_user_start")
         for section, start in ((".text", "_text_start"), (".data", "_data_start"), (".rodata", "_rodata_start")):
             data = e.load_section(section)
             image.add_segment(e.get_symbol_addr(start), data)
-
         image.flash_mode = {'qio':0, 'qout':1, 'dio':2, 'dout': 3}[args.flash_mode]
         image.flash_size_freq = {'4m':0x00, '2m':0x10, '8m':0x20, '16m':0x30, '32m':0x40}[args.flash_size]
         image.flash_size_freq += {'40m':0, '26m':1, '20m':2, '80m': 0xf}[args.flash_freq]
+        image.save(args.output + "0x10000.bin")
 
-        image.save(args.output + "0x00000.bin")
+#        afterload = e.load_section(".bootloader.afterload")
+#        off = 0x4000;
+#        f = open(args.output + "0x%05x.bin" % off, "wb")
+#        f.write(afterload)
+#        f.close()
+        
         data = e.load_section(".irom0.text")
         off = e.get_symbol_addr("_irom0_text_start") - 0x40200000
         assert off >= 0
         f = open(args.output + "0x%05x.bin" % off, "wb")
         f.write(data)
         f.close()
-
     elif args.operation == 'read_mac':
         mac = esp.read_mac()
         print 'MAC: %s' % ':'.join(map(lambda x: '%02x'%x, mac))

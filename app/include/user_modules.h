@@ -3,7 +3,7 @@
 
 #define LUA_USE_BUILTIN_STRING		// for string.xxx()
 #define LUA_USE_BUILTIN_TABLE		// for table.xxx()
-#define LUA_USE_BUILTIN_COROUTINE	// for coroutine.xxx()
+// #define LUA_USE_BUILTIN_COROUTINE	// for coroutine.xxx()
 #define LUA_USE_BUILTIN_MATH		// for math.xxx(), partially work
 // #define LUA_USE_BUILTIN_IO 			// for io.xxx(), partially work
 
@@ -18,9 +18,9 @@
 #define LUA_USE_MODULES_GPIO
 #define LUA_USE_MODULES_WIFI
 #define LUA_USE_MODULES_NET
-#define LUA_USE_MODULES_PWM
+//#define LUA_USE_MODULES_PWM
 #define LUA_USE_MODULES_I2C
-#define LUA_USE_MODULES_SPI
+//#define LUA_USE_MODULES_SPI
 #define LUA_USE_MODULES_TMR
 #define LUA_USE_MODULES_ADC
 #define LUA_USE_MODULES_UART
