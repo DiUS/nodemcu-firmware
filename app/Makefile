@@ -71,10 +71,6 @@ ifeq ($(APP), 2)
 	LD_FILE = $(LDDIR)/eagle.app.v6.app2.ld
 endif
 
-ifeq ($(MAKE_BOOTLOADER), 1)
-	LD_FILE = $(LDDIR)/eagle.app.v6.bootloader.ld
-endif
-
 COMPONENTS_eagle.app.v6 = \
 	user/libuser.a	\
 	driver/libdriver.a	\

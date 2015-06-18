@@ -10,7 +10,6 @@
 #include "lrotable.h"
 
 #include "c_types.h"
-#include "main.h"
 
 #include "rtcmem.h"
 #include "rtctime.h"
