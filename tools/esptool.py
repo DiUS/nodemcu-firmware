@@ -619,7 +619,7 @@ if __name__ == '__main__':
         image.flash_mode = {'qio':0, 'qout':1, 'dio':2, 'dout': 3}[args.flash_mode]
         image.flash_size_freq = {'4m':0x00, '2m':0x10, '8m':0x20, '16m':0x30, '32m':0x40}[args.flash_size]
         image.flash_size_freq += {'40m':0, '26m':1, '20m':2, '80m': 0xf}[args.flash_freq]
-        image.save(args.output + "0x10000.bin")
+        image.save(args.output + "0x00000.bin")
 
 #        afterload = e.load_section(".bootloader.afterload")
 #        off = 0x4000;
