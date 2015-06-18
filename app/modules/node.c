@@ -2,6 +2,7 @@
 
 #include "lua.h"
 #include "lauxlib.h"
+#include "rtcmem.h"
 
 #include "ldo.h"
 #include "lfunc.h"
@@ -69,8 +70,7 @@ static int node_writertc( lua_State* L )
 
   u32 addr = lua_tointeger(L, 1);
   u32 val = lua_tointeger(L, 2);
-  if (!system_rtc_mem_write(64+addr,&val,4))
-    return luaL_error( L, "write failed" );
+  rtc_mem_write(addr,val);
   return 0;
 }
 
@@ -80,10 +80,8 @@ static int node_readrtc( lua_State* L )
     return luaL_error( L, "wrong arg range" );
 
   u32 addr = lua_tointeger(L, 1);
-  u32 val;
+  u32 val = rtc_mem_read(addr);
 
-  if (!system_rtc_mem_read(64+addr,&val,4))
-    return luaL_error( L, "read failed" );
   lua_pushinteger(L, val);
   return 1;
 }
