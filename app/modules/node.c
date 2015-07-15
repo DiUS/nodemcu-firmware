@@ -2,7 +2,6 @@
 
 #include "lua.h"
 #include "lauxlib.h"
-#include "rtcmem.h"
 
 #include "ldo.h"
 #include "lfunc.h"
@@ -25,6 +24,8 @@
 #include "flash_api.h"
 #include "flash_fs.h"
 #include "user_version.h"
+
+#include "rtcaccess.h"
 
 #define CPU80MHZ 80
 #define CPU160MHZ 160
@@ -84,15 +85,6 @@ static int node_readrtc( lua_State* L )
 
   lua_pushinteger(L, val);
   return 1;
-}
-
-static int node_dsleep1820( lua_State* L )
-{
-  u32 with_radio = lua_tointeger(L, 1);
-  u32 immediate  = lua_tointeger(L, 2);
-  u32 min_sleep  = lua_tointeger(L, 3);
-  enter_1820_deep_sleep(with_radio?1:0, immediate?1:0, min_sleep);
-  return 0;
 }
 
 // Lua: dsleep_set_options
@@ -447,6 +439,13 @@ static int node_setcpufreq(lua_State* L)
   return 1;
 }
 
+// Lua: code = bootreason()
+static int node_bootreason (lua_State *L)
+{
+  lua_pushnumber (L, rtc_get_reset_reason ());
+  return 1;
+}
+
 // Module function map
 #define MIN_OPT_LEVEL 2
 #include "lrodefs.h"
@@ -456,7 +455,6 @@ const LUA_REG_TYPE node_map[] =
   { LSTRKEY( "dsleep" ), LFUNCVAL( node_deepsleep ) },
   { LSTRKEY( "writertc" ), LFUNCVAL( node_writertc ) },
   { LSTRKEY( "readrtc" ), LFUNCVAL( node_readrtc ) },
-  { LSTRKEY( "dsleep1820" ), LFUNCVAL( node_dsleep1820 ) },
 
   { LSTRKEY( "info" ), LFUNCVAL( node_info ) },
   { LSTRKEY( "chipid" ), LFUNCVAL( node_chipid ) },
@@ -475,6 +473,7 @@ const LUA_REG_TYPE node_map[] =
   { LSTRKEY( "CPU80MHZ" ), LNUMVAL( CPU80MHZ ) },
   { LSTRKEY( "CPU160MHZ" ), LNUMVAL( CPU160MHZ ) },
   { LSTRKEY( "setcpufreq" ), LFUNCVAL( node_setcpufreq) },
+  { LSTRKEY( "bootreason" ), LFUNCVAL( node_bootreason) },
 // Combined to dsleep(us, option)
 // { LSTRKEY( "dsleepsetoption" ), LFUNCVAL( node_deepsleep_setoption) },
 #if LUA_OPTIMIZE_MEMORY > 0

@@ -1,4 +1,5 @@
 // Module for interfacing with timer
+#define CPU_MHZ 80
 
 #define INIT __attribute__ ((section (".text")))
 
@@ -11,8 +12,8 @@
 
 #include "c_types.h"
 
-#include "rtcmem.h"
 #include "rtctime.h"
+#include "rtcfifo.h"
 
 static os_timer_t alarm_timer[NUM_TMR];
 static int alarm_timer_cb_ref[NUM_TMR] = {LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF,LUA_NOREF};
@@ -189,7 +190,7 @@ static int tmr_time( lua_State* L )
 static int tmr_gettimeofday( lua_State* L )
 {
   struct rtc_timeval tv;
-  rtc_gettimeofday(&tv);
+  rtc_time_gettimeofday(&tv,CPU_MHZ);
 
   lua_pushinteger( L, tv.tv_sec);
   lua_pushinteger( L, tv.tv_usec);
@@ -244,7 +245,7 @@ static int tmr_settimeofday( lua_State* L )
     .tv_sec=luaL_checkinteger( L, 1 ),
     .tv_usec=luaL_checkinteger( L, 2 )
   };
-  rtc_settimeofday(&tv);
+  rtc_time_settimeofday(&tv);
   return 0;
 }
 
@@ -257,12 +258,12 @@ static int tmr_getsample( lua_State* L)
 
   lua_pushinteger( L, s.timestamp);
 
-  uint32_t divisor=rtc_tag_to_divisor(s.tag);
+  uint32_t divisor=rtc_fifo_get_divisor(&s);
   lua_pushnumber( L, (lua_Number)s.value/(lua_Number)divisor);
 
   uint8_t tag[5];
   memset(tag,0,sizeof(tag));
-  rtc_tag_to_string(s.tag,tag);
+  rtc_fifo_tag_to_string(s.tag,tag);
   lua_pushstring( L, tag);
 
   return 3;
@@ -278,12 +279,12 @@ static int tmr_peeksample( lua_State* L)
 
   lua_pushinteger( L, s.timestamp);
 
-  uint32_t divisor=rtc_tag_to_divisor(s.tag);
+  uint32_t divisor=rtc_fifo_get_divisor(&s);
   lua_pushnumber( L, (lua_Number)s.value/(lua_Number)divisor);
 
   uint8_t tag[5];
   memset(tag,0,sizeof(tag));
-  rtc_tag_to_string(s.tag,tag);
+  rtc_fifo_tag_to_string(s.tag,tag);
   lua_pushstring( L, tag);
 
   return 3;
@@ -299,7 +300,7 @@ static int tmr_dropsamples( lua_State* L)
 
 static int tmr_checkmagic( lua_State* L)
 {
-  lua_pushinteger( L, rtc_check_magic());
+  lua_pushinteger( L, rtc_time_check_magic());
   return 1;
 }
 
@@ -310,36 +311,107 @@ static int tmr_ccount( lua_State* L)
 }
 
 
-
-static int tmr_test( lua_State* L )
+static inline void read_sar_dout_reimp(uint16_t* data)
 {
-  uint32_t data=system_rtc_clock_cali_proc();
-  uint32_t data2=dius_rtc_cali();
+  volatile uint32_t* adcp=(volatile uint32_t*)0x60000d80;
+  int i;
 
-  lua_pushinteger( L, data);
-  lua_pushinteger( L, data2);
-  return 2;
+  for (i=0;i<8;i++)
+  {
+    uint32_t a5=255;
+    uint32_t a10=0;
+
+    uint32_t a6=~(adcp[i]);
+    uint32_t a4=((uint8_t)a6)-21;
+    if (((int32_t)a4)>=0)
+      a10=a4;
+    a10*=0x117;
+    a10>>=8;
+
+    if (255>=a10)
+      a5=a10;
+    else
+    {
+      ets_printf("This can never happen!\n");
+    }
+
+    data[i]=(a6&0x00000f00)+a5;
+  }
 }
 
-static int tmr_prepare( lua_State* L )
+static inline void read_adcs(uint16 *ptr, uint16 len, uint32_t cycles_per)
+{
+  rom_sar_init();
+
+  if(len != 0 && ptr != NULL) {
+    uint32 i;
+    uint16 sum;
+    uint16 sar_x[8];
+    rom_i2c_writeReg_Mask(108,2,0,5,5,1);
+    SET_PERI_REG_MASK(0x60000D5C,0x00200000);
+    while(READ_PERI_REG(0x60000D50)&(0x7<<24))
+    {}
+
+    uint32_t when=xthal_get_ccount();
+    while(len--) {
+      while (((int32)(xthal_get_ccount()-when))<0)
+      {}
+      CLEAR_PERI_REG_MASK(0x60000D50,2);
+      SET_PERI_REG_MASK(0x60000D50,2);
+      while(READ_PERI_REG(0x60000D50)&(0x7<<24))
+      {}
+      read_sar_dout_reimp(&sar_x[0]);
+      sum = 0;
+      for(i=0;i<8;i++)
+        sum += sar_x[i];
+      *ptr++ = (sum+4)/8;
+      when+=cycles_per;
+    };
+    rom_i2c_writeReg_Mask(108,2,0,5,5,0);
+    while(READ_PERI_REG(0x60000D50)&(0x7<<24))
+    {}
+    CLEAR_PERI_REG_MASK(0x60000D5C,0x00200000);
+    CLEAR_PERI_REG_MASK(0x60000D60,1);
+    SET_PERI_REG_MASK(0x60000D60,1);
+  }
+}
+
+
+static int tmr_test2( lua_State* L )
+{
+  uint32_t n=luaL_checkinteger( L, 1 );
+  uint32_t cycles=luaL_checkinteger( L, 2 );
+  uint16_t data[256];
+  int i;
+
+  if (n>256)
+    n=256;
+  read_adcs(data,n,cycles);
+  for (i=0;i<n;i++)
+    lua_pushinteger( L,data[i]);
+  return n;
+}
+
+
+static int tmr_fifo_prepare( lua_State* L )
 {
   uint32_t us=luaL_checkinteger( L, 1 );
   uint32_t spb=luaL_checkinteger( L, 2 );
-  rtc_dius_prepare(spb,us);
+  rtc_fifo_prepare(spb,us,0);
 
   return 0;
 }
 
-static int tmr_disprepare( lua_State* L )
+static int tmr_time_prepare( lua_State* L )
 {
-  rtc_dius_disprepare();
+  rtc_time_prepare();
 
   return 0;
 }
 
 static int tmr_have_time(lua_State* L )
 {
-  uint32_t data=rtc_have_time();
+  uint32_t data=rtc_time_have_time();
 
   lua_pushinteger( L, data);
   return 1;
@@ -364,7 +436,7 @@ static int tmr_deep_sleep( lua_State* L )
 {
   uint32_t us=luaL_checkinteger( L, 1 );
   // rtc_invalidate_calibration();
-  rtc_deep_sleep_us(us);
+  rtc_time_deep_sleep_us(us,CPU_MHZ);
 
   return 0;
 }
@@ -374,7 +446,7 @@ static int tmr_sleep_to_sample( lua_State* L )
   uint32_t us=luaL_checkinteger( L, 1 );
 
   // rtc_invalidate_calibration();
-  rtc_deep_sleep_until_sample(us);
+  rtc_fifo_deep_sleep_until_sample(us,CPU_MHZ);
   return 0;
 }
 
@@ -395,13 +467,13 @@ const LUA_REG_TYPE tmr_map[] =
   { LSTRKEY( "wm" ), LFUNCVAL( tmr_writemem) },
   { LSTRKEY( "ccount" ), LFUNCVAL( tmr_ccount) },
   { LSTRKEY( "setled" ), LFUNCVAL( tmr_setled) },
-  { LSTRKEY( "test" ), LFUNCVAL( tmr_test) },
+  { LSTRKEY( "test2" ), LFUNCVAL( tmr_test2) },
 
   { LSTRKEY( "gettimeofday" ), LFUNCVAL( tmr_gettimeofday ) },
   { LSTRKEY( "settimeofday" ), LFUNCVAL( tmr_settimeofday ) },
 
-  { LSTRKEY( "prepare" ), LFUNCVAL( tmr_prepare) },
-  { LSTRKEY( "disprepare" ), LFUNCVAL( tmr_disprepare) },
+  { LSTRKEY( "prepare_fifo" ), LFUNCVAL( tmr_fifo_prepare) },
+  { LSTRKEY( "prepare_time" ), LFUNCVAL( tmr_time_prepare) },
   { LSTRKEY( "deep_sleep" ), LFUNCVAL( tmr_deep_sleep) },
   { LSTRKEY( "request_samples" ), LFUNCVAL( tmr_request_samples) },
   { LSTRKEY( "reload_requested_samples" ), LFUNCVAL( tmr_reload_requested_samples) },
@@ -425,9 +497,11 @@ LUALIB_API int luaopen_tmr( lua_State *L )
     os_timer_setfn(&(alarm_timer[i]), (os_timer_func_t *)(alarm_timer_cb[i]), L);
   }
 
+#if 0
   os_timer_disarm(&rtc_timer_updator);
   os_timer_setfn(&rtc_timer_updator, (os_timer_func_t *)(rtc_timer_update_cb), NULL);
   os_timer_arm(&rtc_timer_updator, 500, 1); 
+#endif
 
 #if LUA_OPTIMIZE_MEMORY > 0
   return 0;
