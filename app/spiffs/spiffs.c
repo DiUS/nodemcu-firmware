@@ -47,6 +47,8 @@ void myspiffs_mount() {
   cfg.phys_addr = ( u32_t )platform_flash_get_first_free_block_address( NULL ); 
   cfg.phys_addr += 0x3000;
   cfg.phys_addr &= 0xFFFFC000;  // align to 4 sector.
+
+  cfg.phys_addr = 2*1024*1024+INTERNAL_FLASH_START_ADDRESS;
   cfg.phys_size = INTERNAL_FLASH_SIZE - ( ( u32_t )cfg.phys_addr - INTERNAL_FLASH_START_ADDRESS );
   cfg.phys_erase_block = INTERNAL_FLASH_SECTOR_SIZE; // according to datasheet
   cfg.log_block_size = INTERNAL_FLASH_SECTOR_SIZE; // let us not complicate things
@@ -82,6 +84,8 @@ int myspiffs_format( void )
   sect_first = ( u32_t )platform_flash_get_first_free_block_address( NULL ); 
   sect_first += 0x3000;
   sect_first &= 0xFFFFC000;  // align to 4 sector.
+
+  sect_first = 2*1024*1024+INTERNAL_FLASH_START_ADDRESS;
   sect_first = platform_flash_get_sector_of_address(sect_first);
   sect_last = INTERNAL_FLASH_SIZE + INTERNAL_FLASH_START_ADDRESS - 4;
   sect_last = platform_flash_get_sector_of_address(sect_last);
