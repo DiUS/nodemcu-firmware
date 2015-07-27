@@ -190,7 +190,7 @@ static int tmr_time( lua_State* L )
 static int tmr_gettimeofday( lua_State* L )
 {
   struct rtc_timeval tv;
-  rtc_time_gettimeofday(&tv,CPU_MHZ);
+  rtc_time_gettimeofday(&tv);
 
   lua_pushinteger( L, tv.tv_sec);
   lua_pushinteger( L, tv.tv_usec);
@@ -392,6 +392,21 @@ static int tmr_test2( lua_State* L )
   return n;
 }
 
+static int tmr_getchannel( lua_State* L )
+{
+  lua_pushinteger( L,wifi_get_channel());
+  return 1;
+}
+
+static int tmr_setchannel( lua_State* L )
+{
+  uint32_t channel=luaL_checkinteger( L, 1 );
+  wifi_set_channel(channel);
+
+  lua_pushinteger( L,wifi_get_channel());
+  return 1;
+}
+
 
 static int tmr_fifo_prepare( lua_State* L )
 {
@@ -436,7 +451,7 @@ static int tmr_deep_sleep( lua_State* L )
 {
   uint32_t us=luaL_checkinteger( L, 1 );
   // rtc_invalidate_calibration();
-  rtc_time_deep_sleep_us(us,CPU_MHZ);
+  rtc_time_deep_sleep_us(us);
 
   return 0;
 }
@@ -446,7 +461,7 @@ static int tmr_sleep_to_sample( lua_State* L )
   uint32_t us=luaL_checkinteger( L, 1 );
 
   // rtc_invalidate_calibration();
-  rtc_fifo_deep_sleep_until_sample(us,CPU_MHZ);
+  rtc_fifo_deep_sleep_until_sample(us);
   return 0;
 }
 
@@ -468,6 +483,8 @@ const LUA_REG_TYPE tmr_map[] =
   { LSTRKEY( "ccount" ), LFUNCVAL( tmr_ccount) },
   { LSTRKEY( "setled" ), LFUNCVAL( tmr_setled) },
   { LSTRKEY( "test2" ), LFUNCVAL( tmr_test2) },
+  { LSTRKEY( "getchannel" ), LFUNCVAL( tmr_getchannel) },
+  { LSTRKEY( "setchannel" ), LFUNCVAL( tmr_setchannel) },
 
   { LSTRKEY( "gettimeofday" ), LFUNCVAL( tmr_gettimeofday ) },
   { LSTRKEY( "settimeofday" ), LFUNCVAL( tmr_settimeofday ) },
