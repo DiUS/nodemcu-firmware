@@ -613,7 +613,7 @@ if __name__ == '__main__':
         # Actual nodemcu firmware
         image = ESPFirmwareImage()
         image.entrypoint = e.get_symbol_addr("call_user_start")
-        for section, start in ((".text", "_text_start"), (".data", "_data_start"), (".rodata", "_rodata_start")):
+        for section, start in ((".data", "_data_start"), (".text", "_text_start"), (".rodata", "_rodata_start")):
             data = e.load_section(section)
             image.add_segment(e.get_symbol_addr(start), data)
         image.flash_mode = {'qio':0, 'qout':1, 'dio':2, 'dout': 3}[args.flash_mode]
