@@ -142,7 +142,8 @@ void user_init(void)
 #ifdef DEVELOP_VERSION
     uart_init(BIT_RATE_74880, BIT_RATE_74880);
 #else
-    uart_init(BIT_RATE_115200, BIT_RATE_115200);
+    uart_init(BIT_RATE_74880, BIT_RATE_74880);
+    // uart_init(BIT_RATE_115200, BIT_RATE_115200);
 #endif
     // uart_init(BIT_RATE_115200, BIT_RATE_115200);
 
@@ -162,5 +163,51 @@ uint32_t __wrap_pm_rtc_clock_cali(void)
     // os_printf("answer %d, pd=%d\n",answer,pm_data[1]);
 
     return answer;
+}
+#endif
+
+#if 0
+uint32_t (*their_fn)(void* arg)=NULL;
+
+#define COUNT 32
+static uint32_t in[COUNT];
+static uint32_t out[COUNT];
+static pos=0;
+
+uint32_t my_fn(void* arg)
+{
+    in[pos]=xthal_get_ccount();
+    if (their_fn)
+        their_fn(arg);
+}
+
+uint32_t __wrap_ets_set_idle_cb(void* fn, void* arg)
+{
+    their_fn=fn;
+    // c_printf("idle_cb(%p,%p)\n",fn,arg);
+    if (fn)
+        return __real_ets_set_idle_cb(my_fn,arg);
+    else
+    {
+        out[pos]=xthal_get_ccount();
+        pos++;
+        if (pos==COUNT)
+        {
+            int i;
+
+            for (i=0;i<COUNT;i++)
+            {
+                uint32_t d=out[i]-in[i];
+                c_printf("%9u -> %9u   (%9u)   %4u/%06u -> %4u/%06u (%4u/%06u)\n",
+                         in[i],out[i],d,
+                         (in[i]/80)/102400,(in[i]/80)%102400,
+                         (out[i]/80)/102400,(out[i]/80)%102400,
+                         (d/80)/102400,(d/80)%102400);
+            }
+            pos=0;
+        }
+        return __real_ets_set_idle_cb(NULL,arg);
+    }
+
 }
 #endif
