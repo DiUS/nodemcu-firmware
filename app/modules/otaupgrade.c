@@ -101,12 +101,12 @@ typedef enum { IN_TEST_DISALLOWED, IN_TEST_ALLOWED } intest_policy_t;
 
 static bool ota_flashing_in_progress;
 
-static ota_header get_ota_header (lua_State *L, uint8_t slot)
+static ota_header get_ota_header (lua_State *L, uint8_t slot, bool raise_error)
 {
   uint32_t addr = (slot * MEGABYTE + FW_OFFS);
   ota_header hdr;
   platform_flash_read (&hdr, addr, sizeof (hdr));
-  if (hdr.magic != OTA_HDR_MAGIC)
+  if (raise_error && hdr.magic != OTA_HDR_MAGIC)
     luaL_error (L, "slot %c firmware is not an OTA image", 'A' + slot);
   return hdr;
 }
@@ -117,7 +117,7 @@ static void ensure_possible (lua_State *L, intest_policy_t policy)
   if (flash_detect_size_byte () < 2*MEGABYTE)
     luaL_error (L, "unsupported, flash chip is too small");
 
-  ota_header hdr = get_ota_header (L, saved_slot);
+  ota_header hdr = get_ota_header (L, saved_slot, true);
 
   if ((hdr.flags_num_sections & BOOT_STATUS_IN_TEST) &&
       (policy == IN_TEST_DISALLOWED))
@@ -199,7 +199,7 @@ static int lotaupgrade_complete (lua_State *L)
 
   ota_flashing_in_progress = false;
   /* Clear the 'invalid' bit to mark this image as available to boot */
-  ota_header hdr = get_ota_header (L, !saved_slot);
+  ota_header hdr = get_ota_header (L, !saved_slot, true);
   hdr.flags_num_sections &= ~BOOT_STATUS_INVALID;
 
   uint32_t dst_addr = get_flash_write_addr_for_offset (!saved_slot, 0);
@@ -214,12 +214,12 @@ static int lotaupgrade_accept (lua_State *L)
 {
   ensure_possible (L, IN_TEST_ALLOWED);
 
-  ota_header hdr = get_ota_header (L, saved_slot);
+  ota_header hdr = get_ota_header (L, saved_slot, true);
   if (!(hdr.flags_num_sections & BOOT_STATUS_IN_TEST))
     return 0;
 
   /* First, clear the preferred bit in the old slot */
-  ota_header old_hdr = get_ota_header (L, !saved_slot);
+  ota_header old_hdr = get_ota_header (L, !saved_slot, true);
   old_hdr.flags_num_sections &= ~BOOT_STATUS_PREFERRED;
   uint32_t dst_addr = get_flash_write_addr_for_offset (!saved_slot, 0);
   ota_flash_write (L, &old_hdr, dst_addr, sizeof (old_hdr));
@@ -242,7 +242,7 @@ static int lotaupgrade_reject (lua_State *L)
 {
   ensure_possible (L, IN_TEST_ALLOWED);
 
-  ota_header hdr = get_ota_header (L, saved_slot);
+  ota_header hdr = get_ota_header (L, saved_slot, true);
   if (!(hdr.flags_num_sections & BOOT_STATUS_IN_TEST))
     return 0;
 
@@ -276,37 +276,40 @@ static int lotaupgrade_info (lua_State *L)
   uint8_t i;
   for (i = 0; i < 2; ++i)
   {
-    slot[0] = 'A' + i;
-    lua_pushstring (L, slot);
-    lua_createtable (L, 0, 3);
-
-    ota_header hdr = get_ota_header (L, i);
-    /* Sigh, no proper stdbool.h, have to ternary to get a proper 0 vs 1 */
-    bool preferred = hdr.flags_num_sections & BOOT_STATUS_PREFERRED ? 1 : 0;
-    bool in_test = hdr.flags_num_sections & BOOT_STATUS_IN_TEST ? 1 : 0;
-
-    lua_pushliteral (L, "preferred");
-    lua_pushnumber (L, preferred);
-    lua_settable (L, -3);
-
-    lua_pushliteral (L, "in_test");
-    lua_pushnumber (L, in_test);
-    lua_settable (L, -3);
-
-    if (in_test)
+    ota_header hdr = get_ota_header (L, i, false);
+    if (hdr.magic == OTA_HDR_MAGIC)
     {
-      int count = 0;
-      while (hdr.boot_bits)
-      {
-        hdr.boot_bits &= hdr.boot_bits - 1;
-        ++count;
-      }
-      lua_pushliteral (L, "attempts_left");
-      lua_pushnumber (L, count);
-      lua_settable (L, -3);
-    }
+      slot[0] = 'A' + i;
+      lua_pushstring (L, slot);
+      lua_createtable (L, 0, 3);
 
-    lua_settable (L, -3); /* .X = info_table */
+      /* Sigh, no proper stdbool.h, have to ternary to get a proper 0 vs 1 */
+      bool preferred = hdr.flags_num_sections & BOOT_STATUS_PREFERRED ? 1 : 0;
+      bool in_test = hdr.flags_num_sections & BOOT_STATUS_IN_TEST ? 1 : 0;
+
+      lua_pushliteral (L, "preferred");
+      lua_pushnumber (L, preferred);
+      lua_settable (L, -3);
+
+      lua_pushliteral (L, "in_test");
+      lua_pushnumber (L, in_test);
+      lua_settable (L, -3);
+
+      if (in_test)
+      {
+        int count = 0;
+        while (hdr.boot_bits)
+        {
+          hdr.boot_bits &= hdr.boot_bits - 1;
+          ++count;
+        }
+        lua_pushliteral (L, "attempts_left");
+        lua_pushnumber (L, count);
+        lua_settable (L, -3);
+      }
+
+      lua_settable (L, -3); /* .X = info_table */
+    }
   }
   return 1;
 }
