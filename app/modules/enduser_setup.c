@@ -251,7 +251,6 @@ typedef struct
 static enduser_setup_state_t *state;
 static bool manual = false;
 static task_handle_t do_station_cfg_handle;
-static task_handle_t do_disconnect_tcp_handle;
 
 static int enduser_setup_manual(lua_State* L);
 static int enduser_setup_start(lua_State* L);
@@ -346,7 +345,9 @@ static void enduser_setup_check_station_stop(void)
   ENDUSER_SETUP_DEBUG("enduser_setup_check_station_stop");
 
   if (state != NULL)
+  {
     os_timer_disarm(&(state->check_station_timer));
+  }
 }
 
 
@@ -756,20 +757,6 @@ static void serve_status(struct espconn *conn)
 
 
 /**
- * Disconnect TCP connection from HTTP server.
- * This config *cannot* be done in the network receive callback or serious
- * issues like memory corruption occur.
- */
-static void do_disconnect_tcp(task_param_t param, uint8_t prio)
-{
-  struct espconn *espconn = (struct espconn *) param;
-  (void)prio;
-
-   espconn_delete(espconn);
-}
-
-
-/**
  * Disconnect HTTP client
  *
  * End TCP connection and free up resources.
@@ -777,7 +764,12 @@ static void do_disconnect_tcp(task_param_t param, uint8_t prio)
 static void enduser_setup_http_disconnect(struct espconn *espconn)
 {
   ENDUSER_SETUP_DEBUG("enduser_setup_http_disconnect");
-  task_post_high(do_disconnect_tcp_handle, (task_param_t) espconn);
+  /*TODO: Implement early TCP disconnections.
+   * The espconn * here is frequently a temporary lwIP internal struct (when it is passed in to an API callback),
+   * and is not valid after the callback returns. The SDK doc isn't sufficiently explicit about
+   * (but see "2C" 1.5.1, p193 for the hint). To do the disconnects safely, you'll need to stash away
+   * the remote_ip and remote_port like what is done in the scan_listeners.
+   */
 }
 
 
@@ -1404,10 +1396,6 @@ static int enduser_setup_start(lua_State *L)
   if (!do_station_cfg_handle)
   {
     do_station_cfg_handle = task_get_id(do_station_cfg);
-  }
-  if (!do_disconnect_tcp_handle)
-  {
-    do_disconnect_tcp_handle = task_get_id(do_disconnect_tcp);
   }
 
   if(enduser_setup_init(L))
