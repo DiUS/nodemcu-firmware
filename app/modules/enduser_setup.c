@@ -253,8 +253,9 @@ static bool manual = false;
 static task_handle_t do_station_cfg_handle;
 static task_handle_t do_disconnect_tcp_handle;
 
+static int enduser_setup_manual(lua_State* L);
 static int enduser_setup_start(lua_State* L);
-static void enduser_setup_stop();
+static int enduser_setup_stop(lua_State* L);
 static void enduser_setup_stop_callback(void *ptr);
 static void enduser_setup_station_start(void);
 static void enduser_setup_ap_start(void);
@@ -274,7 +275,7 @@ static void enduser_setup_debug(int line, const char *str);
 #define ENDUSER_SETUP_ERROR(str, err, err_severity) \
   do { \
     ENDUSER_SETUP_DEBUG(str); \
-    if (err_severity & ENDUSER_SETUP_ERR_FATAL) enduser_setup_stop();\
+    if (err_severity & ENDUSER_SETUP_ERR_FATAL) enduser_setup_stop(lua_getstate());\
       enduser_setup_error(__LINE__, str, err);\
     if (!(err_severity & ENDUSER_SETUP_ERR_NO_RETURN)) \
       return err; \
@@ -284,7 +285,7 @@ static void enduser_setup_debug(int line, const char *str);
 #define ENDUSER_SETUP_ERROR_VOID(str, err, err_severity) \
   do { \
     ENDUSER_SETUP_DEBUG(str); \
-    if (err_severity & ENDUSER_SETUP_ERR_FATAL) enduser_setup_stop();\
+    if (err_severity & ENDUSER_SETUP_ERR_FATAL) enduser_setup_stop(lua_getstate());\
        enduser_setup_error(__LINE__, str, err);\
     if (!(err_severity & ENDUSER_SETUP_ERR_NO_RETURN)) \
       return; \
@@ -1433,7 +1434,7 @@ static int enduser_setup_start(lua_State *L)
   goto out;
 
 failed:
-  enduser_setup_stop();
+  enduser_setup_stop(lua_getstate());
 out:
   return 0;
 }
@@ -1444,11 +1445,11 @@ out:
  */
 static void enduser_setup_stop_callback(void *ptr)
 {
-  enduser_setup_stop();
+  enduser_setup_stop(lua_getstate());
 }
 
 
-static void enduser_setup_stop()
+static int enduser_setup_stop(lua_State* L)
 {
   ENDUSER_SETUP_DEBUG("enduser_setup_stop");
 
@@ -1460,7 +1461,7 @@ static void enduser_setup_stop()
   enduser_setup_http_stop();
   enduser_setup_free();
 
-  return;
+  return 0;
 }
 
 
