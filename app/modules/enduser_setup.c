@@ -1233,6 +1233,10 @@ static void enduser_setup_free(void)
     return;
   }
 
+  /* Make sure no running timers are left. */
+  os_timer_disarm(&(state->check_station_timer));
+  os_timer_disarm(&(state->shutdown_timer));
+
   if (state->espconn_dns_udp != NULL)
   {
     if (state->espconn_dns_udp->proto.udp != NULL)
