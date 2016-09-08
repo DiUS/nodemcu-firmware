@@ -1,6 +1,8 @@
 #ifndef _SDK_OVERRIDE_MEM_H_
 #define _SDK_OVERRIDE_MEM_H_
 
+#include <stddef.h>
+
 void *pvPortMalloc (size_t sz, const char *, unsigned);
 void vPortFree (void *p, const char *, unsigned);
 void *pvPortZalloc (size_t sz, const char *, unsigned);

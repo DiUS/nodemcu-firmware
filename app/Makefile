@@ -29,6 +29,7 @@ SUBDIRS= 					\
 	libc 					\
 	lua 					\
 	lwip 					\
+	mbedtls					\
 	coap 					\
 	mqtt 					\
 	task 					\
@@ -93,6 +94,7 @@ COMPONENTS_eagle.app.v6 = 			\
 	websocket/libwebsocket.a			\
 	net/libnodemcu_net.a			\
 	modules/libmodules.a			\
+	mbedtls/libmbedtls.a			\
 
 # Inspect the modules library and work out which modules need to be linked.
 # For each enabled module, a symbol name of the form XYZ_module_selected is
@@ -121,7 +123,6 @@ LINKFLAGS_eagle.app.v6 = 			\
 	-lwpa2					\
 	-lmain 					\
 	-lsmartconfig 				\
-	-lssl 					\
 	-lcrypto				\
 	$(DEP_LIBS_eagle.app.v6) 		\
 	-Wl,--end-group 			\

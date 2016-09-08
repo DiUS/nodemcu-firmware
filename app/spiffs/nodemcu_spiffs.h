@@ -6,7 +6,6 @@
 #include "c_stddef.h"
 #include "c_stdio.h"
 #include "user_interface.h"
-typedef uint32_t intptr_t;
 #endif
 
 // Turn off stats

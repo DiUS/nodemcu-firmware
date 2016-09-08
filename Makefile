@@ -18,6 +18,8 @@ SDK_FILE_SHA1:=868784bd37d47f31d52b81f133aa1fb70c58e17d
 SDK_PATCH_VER:=$(SDK_VER)_patch_20160704
 SDK_PATCH_ID:=1572
 SDK_PATCH_SHA1:=388d9e91df74e3b49fca126da482cf822cf1ebf1
+SDK_MBEDTLS_VER:=20160718
+SDK_MBEDTLS_SHA1:=2ad91416e6ff5381313ab6357b0b99c7f993128a
 # Ensure we search "our" SDK before the tool-chain's SDK (if any)
 TOP_DIR:=$(abspath $(dir $(lastword $(MAKEFILE_LIST))))
 SDK_DIR:=$(TOP_DIR)/sdk/esp_iot_sdk_v$(SDK_VER)
@@ -198,11 +200,14 @@ all:	$(SDK_DIR_DEPENDS) pre_build .subdirs $(OBJS) $(OLIBS) $(OIMAGES) $(OBINS) 
 sdk_extracted: $(TOP_DIR)/sdk/.extracted-$(SDK_BASE_VER)
 sdk_patched: sdk_extracted $(TOP_DIR)/sdk/.patched-$(SDK_VER)
 
-$(TOP_DIR)/sdk/.extracted-$(SDK_BASE_VER): $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_FILE_VER).zip
+$(TOP_DIR)/sdk/.extracted-$(SDK_BASE_VER): $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_FILE_VER).zip $(TOP_DIR)/cache/esp8266_nonos_sdk_mbedtls_$(SDK_MBEDTLS_VER).zip
 	mkdir -p "$(dir $@)"
 	(cd "$(dir $@)" && rm -fr esp_iot_sdk_v$(SDK_VER) ESP8266_NONOS_SDK && unzip $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_FILE_VER).zip ESP8266_NONOS_SDK/lib/* ESP8266_NONOS_SDK/ld/eagle.rom.addr.v6.ld ESP8266_NONOS_SDK/include/* )
+	(cd "$(dir $@)" && unzip $(TOP_DIR)/cache/esp8266_nonos_sdk_mbedtls_$(SDK_MBEDTLS_VER).zip ESP8266_NONOS_SDK_MBEDTLS/mbedtls_demo/* )
 	mv $(dir $@)/ESP8266_NONOS_SDK $(dir $@)/esp_iot_sdk_v$(SDK_VER)
-	rm -f $(SDK_DIR)/lib/liblwip.a
+	mv $(dir $@)/ESP8266_NONOS_SDK_MBEDTLS/mbedtls_demo $(dir $@)/
+	rm -rf $(dir $@)/ESP8266_NONOS_SDK_MBEDTLS
+	rm -f $(SDK_DIR)/lib/liblwip.a  $(SDK_DIR)/include/c_types.h
 	touch $@
 
 $(TOP_DIR)/sdk/.patched-$(SDK_VER): $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_PATCH_VER).zip
@@ -211,6 +216,11 @@ $(TOP_DIR)/sdk/.patched-$(SDK_VER): $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_PATCH_VE
 	rmdir $(dir $@)/patch
 	rm -f $(SDK_DIR)/lib/liblwip.a
 	touch $@
+
+$(TOP_DIR)/cache/esp8266_nonos_sdk_mbedtls_$(SDK_MBEDTLS_VER).zip:
+	mkdir -p "$(dir $@)"
+	wget --tries=10 --timeout=15 --waitretry=30 --read-timeout=20 --retry-connrefused http://espressif.com/sites/default/files/sdks/esp8266_nonos_sdk_mbedtls_$(SDK_MBEDTLS_VER).zip -O $@ || { rm -f "$@"; exit 1; }
+	(echo "$(SDK_MBEDTLS_SHA1) *$@" | sha1sum -c -) || { rm -f "$@"; exit 1; }
 
 $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_FILE_VER).zip:
 	mkdir -p "$(dir $@)"
