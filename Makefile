@@ -204,8 +204,9 @@ $(TOP_DIR)/sdk/.extracted-$(SDK_BASE_VER): $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_F
 	mkdir -p "$(dir $@)"
 	(cd "$(dir $@)" && rm -fr esp_iot_sdk_v$(SDK_VER) ESP8266_NONOS_SDK && unzip $(TOP_DIR)/cache/esp_iot_sdk_v$(SDK_FILE_VER).zip ESP8266_NONOS_SDK/lib/* ESP8266_NONOS_SDK/ld/eagle.rom.addr.v6.ld ESP8266_NONOS_SDK/include/* )
 	(cd "$(dir $@)" && unzip $(TOP_DIR)/cache/esp8266_nonos_sdk_mbedtls_$(SDK_MBEDTLS_VER).zip ESP8266_NONOS_SDK_MBEDTLS/mbedtls_demo/* )
-	mv $(dir $@)/ESP8266_NONOS_SDK $(dir $@)/esp_iot_sdk_v$(SDK_VER)
-	mv $(dir $@)/ESP8266_NONOS_SDK_MBEDTLS/mbedtls_demo $(dir $@)/
+	mv $(dir $@)/ESP8266_NONOS_SDK $(SDK_DIR)
+	mv $(dir $@)/ESP8266_NONOS_SDK_MBEDTLS/mbedtls_demo $(dir $@)/mbedtls_src
+	cp -r $(dir $@)/mbedtls_src/include/mbedtls $(SDK_DIR)/include/
 	rm -rf $(dir $@)/ESP8266_NONOS_SDK_MBEDTLS
 	rm -f $(SDK_DIR)/lib/liblwip.a  $(SDK_DIR)/include/c_types.h
 	touch $@

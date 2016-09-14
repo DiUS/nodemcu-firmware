@@ -17,16 +17,16 @@ endif
 
 STD_CFLAGS=-std=gnu11 -Wimplicit -Wno-implicit-function-declaration
 
-DEMO_PATH=../../sdk/mbedtls_demo
+MBEDTLS_PATH=../../sdk/mbedtls_src
 
 # Important: platform must go before library, due to double "net.c" files
-VPATH:=$(addprefix $(DEMO_PATH)/mbedtls/, platform library app)
+VPATH:=$(addprefix $(MBEDTLS_PATH)/mbedtls/, platform library app)
 
 # All .c files as their corresponding .o files, no path.
 COMPONENTS_libmbedtls:=$(patsubst %.c,%.o,$(notdir $(foreach dir,$(VPATH),$(wildcard $(dir)/*.c))))
 
-INCLUDES += -I $(DEMO_PATH)/include -I $(DEMO_PATH)/include/mbedtls
-DEFINES += -DMBEDTLS_CONFIG_FILE='"config_esp.h"'
+INCLUDES += -I $(MBEDTLS_PATH)/include -I $(MBEDTLS_PATH)/include/mbedtls
+DEFINES += -DMBEDTLS_CONFIG_FILE='"config_esp.h"' -Dfcntl=lwip_fcntl
 
 #############################################################
 # Configuration i.e. compile options etc.
