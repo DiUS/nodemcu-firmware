@@ -140,7 +140,6 @@
 
 #include "fifo.h" // This gets us the sample_t structure
 #include <stdbool.h>
-#include <spi_flash.h>
 
 typedef struct
 {
@@ -157,6 +156,12 @@ typedef struct
 } flash_fifo_t;
 
 typedef uint32_t data_sector_t; // These are relative to flash_fifo_t->data
+typedef struct
+{
+  data_sector_t sector;
+  uint32_t      index;
+} flash_fifo_slot_t;
+
 
 #define ESP8266_SECTOR_SIZE SPI_FLASH_SEC_SIZE
 #ifndef ESP8266_FLASH_FIFO_START
@@ -178,6 +183,8 @@ static SpiFlashOpResult fake_spi_flash_read(uint32_t addr, uint32_t* data, uint3
 #define spi_flash_erase_sector fake_spi_flash_erase_sector
 #define spi_flash_write        fake_spi_flash_write
 #define spi_flash_read         fake_spi_flash_read
+#else
+#include <spi_flash.h>
 #endif
 
 #ifdef BOOTLOADER_CODE
@@ -304,14 +311,14 @@ INTERNAL static inline bool flash_fifo_get_counter(uint32_t* result, const flash
 {
   uint32_t addr=sector*fifo->sector_size+offset;
   uint32_t response=0;
-
   while (1)
   {
     uint32_t buffer[FLASH_FIFO_LONGS_PER_READ];
+
     if (spi_flash_read(addr,(void*)buffer,sizeof(buffer))!=SPI_FLASH_RESULT_OK)
       return false;
     uint32_t ind=0;
-    while (buffer[ind]==0 && ind<FLASH_FIFO_LONGS_PER_READ)
+    while (ind<FLASH_FIFO_LONGS_PER_READ && buffer[ind]==0)
     {
       ind++;
       response+=32;
@@ -420,25 +427,83 @@ INTERNAL static inline data_sector_t flash_fifo_next_data_sector(const flash_fif
   return sector;
 }
 
+INTERNAL static inline bool flash_fifo_advance_head_sector(const flash_fifo_t* fifo, data_sector_t head_sector,
+                                                           data_sector_t* result)
+{
+  data_sector_t next_head_sector=flash_fifo_next_data_sector(fifo,head_sector);
+  if (result)
+    *result=next_head_sector;
+  if (next_head_sector==0)
+    return flash_fifo_reset_head_sector_counter(fifo);
+  else
+    return flash_fifo_mark_head_sector(head_sector,fifo);
+}
+
+INTERNAL static inline bool flash_fifo_advance_tail_sector(const flash_fifo_t* fifo, data_sector_t tail_sector,
+                                                           data_sector_t* result)
+{
+  data_sector_t next_tail_sector=flash_fifo_next_data_sector(fifo,tail_sector);
+  if (result)
+    *result=next_tail_sector;
+  if (next_tail_sector==0)
+    return flash_fifo_reset_tail_sector_counter(fifo);
+  else
+    return flash_fifo_mark_tail_sector(tail_sector,fifo);
+}
+
+INTERNAL static inline bool flash_fifo_get_head(flash_fifo_slot_t* result, const flash_fifo_t* fifo)
+{
+  if (flash_fifo_get_head_sector(&result->sector,fifo)==false ||
+      flash_fifo_get_head_index(&result->index,fifo,result->sector)==false)
+    return false;
+  if (result->index>=fifo->data_entries_per_sector)
+  {
+    if (flash_fifo_advance_head_sector(fifo,result->sector,&result->sector)==false)
+      return false;
+    result->index=0;
+  }
+  return true;
+}
+
+INTERNAL static inline bool flash_fifo_get_tail(flash_fifo_slot_t* result, const flash_fifo_t* fifo)
+{
+  if (flash_fifo_get_tail_sector(&result->sector,fifo)==false ||
+      flash_fifo_get_tail_index(&result->index,fifo,result->sector)==false)
+    return false;
+  if (result->index>=fifo->data_entries_per_sector)
+  {
+    data_sector_t next_tail_sector=flash_fifo_next_data_sector(fifo,result->sector);
+    data_sector_t head_sector;
+    if (flash_fifo_get_head_sector(&head_sector,fifo)==false)
+      return false;
+    if (next_tail_sector==head_sector)
+    {
+      if (flash_fifo_advance_head_sector(fifo,head_sector,NULL)==false)
+        return false;
+    }
+    if (flash_fifo_erase_data_sector(fifo,next_tail_sector)==false)
+      return false;
+    if (flash_fifo_advance_tail_sector(fifo,result->sector,&result->sector)==false)
+      return false;
+    result->index=0;
+  }
+  return true;
+}
+
 INTERNAL static inline uint32_t flash_fifo_count(void)
 {
   const flash_fifo_t* fifo=flash_fifo_get_header();
   if (!flash_fifo_valid_header(fifo))
     return 0;
 
-  data_sector_t head_sector;
-  uint32_t      head_index;
-  uint32_t      tail_sector;
-  uint32_t      tail_index;
+  flash_fifo_slot_t head,tail;
   uint32_t      eps=fifo->data_entries_per_sector;
 
-  if (flash_fifo_get_head_sector(&head_sector,fifo)==false ||
-      flash_fifo_get_head_index(&head_index,fifo,head_sector)==false ||
-      flash_fifo_get_tail_sector(&tail_sector,fifo)==false ||
-      flash_fifo_get_tail_index(&tail_index,fifo,tail_sector)==false)
+  if (flash_fifo_get_tail(&tail,fifo)==false ||
+      flash_fifo_get_head(&head,fifo)==false)
     return 0;
-  uint32_t head_pos=head_sector*eps+head_index;
-  uint32_t tail_pos=tail_sector*eps+tail_index;
+  uint32_t head_pos=head.sector*eps+head.index;
+  uint32_t tail_pos=tail.sector*eps+tail.index;
 
   if (tail_pos>=head_pos)
     return tail_pos-head_pos;
@@ -446,43 +511,20 @@ INTERNAL static inline uint32_t flash_fifo_count(void)
   return tail_pos+total_entries-head_pos;
 }
 
-INTERNAL static inline bool flash_fifo_advance_head_sector(const flash_fifo_t* fifo, data_sector_t head_sector)
-{
-  data_sector_t next_head_sector=flash_fifo_next_data_sector(fifo,head_sector);
-  if (next_head_sector==0)
-    return flash_fifo_reset_head_sector_counter(fifo);
-  else
-    return flash_fifo_mark_head_sector(head_sector,fifo);
-}
-
-INTERNAL static inline bool flash_fifo_advance_tail_sector(const flash_fifo_t* fifo, data_sector_t tail_sector)
-{
-  data_sector_t next_tail_sector=flash_fifo_next_data_sector(fifo,tail_sector);
-  if (next_tail_sector==0)
-    return flash_fifo_reset_tail_sector_counter(fifo);
-  else
-    return flash_fifo_mark_tail_sector(tail_sector,fifo);
-}
 
 INTERNAL static inline bool flash_fifo_drop_one_sample(const flash_fifo_t* fifo)
 {
-  data_sector_t head_sector;
-  uint32_t      head_index;
+  flash_fifo_slot_t head;
   uint32_t      tail_index;
   uint32_t      eps=fifo->data_entries_per_sector;
 
-  if (flash_fifo_get_head_sector(&head_sector,fifo)==false ||
-      flash_fifo_get_head_index(&head_index,fifo,head_sector)==false ||
-      flash_fifo_get_tail_index(&tail_index,fifo,head_sector)==false)
+  if (flash_fifo_get_head(&head,fifo)==false ||
+      flash_fifo_get_tail_index(&tail_index,fifo,head.sector)==false)
     return false;
-  if (tail_index<=head_index)
+  if (tail_index<=head.index)
     return false;
-  if (!flash_fifo_mark_head_index(head_index,fifo,head_sector))
+  if (!flash_fifo_mark_head_index(head.index,fifo,head.sector))
     return false;
-  if (head_index+1==eps)
-  {
-    return flash_fifo_advance_head_sector(fifo,head_sector);
-  }
   return true;
 }
 
@@ -535,81 +577,34 @@ API static inline uint32_t flash_fifo_get_max_size(void)
 }
 
 
-
-
-// returns true if sample is available, false if not
-API static inline bool flash_fifo_peek_sample_deprecated(sample_t* dst, uint32_t from_top)
-{
-  const flash_fifo_t* fifo=flash_fifo_get_header();
-  if (!flash_fifo_valid_header(fifo))
-    return false;
-
-  data_sector_t head_sector;
-  uint32_t      head_index;
-  uint32_t      tail_index;
-  uint32_t      eps=fifo->data_entries_per_sector;
-
-  if (flash_fifo_get_head_sector(&head_sector,fifo)==false ||
-      flash_fifo_get_head_index(&head_index,fifo,head_sector)==false ||
-      flash_fifo_get_tail_index(&tail_index,fifo,head_sector)==false)
-    return false;
-  do
-  {
-    head_index+=from_top;
-    from_top=0;
-    if (head_index>=eps)
-    {
-      if (tail_index<eps)
-        return false;
-      from_top=head_index-eps;
-      head_index=0;
-      head_sector=flash_fifo_next_data_sector(fifo,head_sector);
-      if (!flash_fifo_get_tail_index(&tail_index,fifo,head_sector))
-        return false;
-    }
-  } while (from_top>0);
-  if (tail_index<=head_index)
-    return false;
-  return flash_fifo_read_sample(dst,fifo,head_sector,head_index);
-}
-
 API static inline bool flash_fifo_peek_sample(sample_t* dst, uint32_t from_top)
 {
   const flash_fifo_t* fifo=flash_fifo_get_header();
   if (!flash_fifo_valid_header(fifo))
     return false;
 
-  data_sector_t head_sector;
-  uint32_t      head_index;
-  uint32_t      tail_sector;
-  uint32_t      eps=fifo->data_entries_per_sector;
+  flash_fifo_slot_t head,tail;
+  uint32_t          eps=fifo->data_entries_per_sector;
 
-  if (flash_fifo_get_head_sector(&head_sector,fifo)==false ||
-      flash_fifo_get_head_index(&head_index,fifo,head_sector)==false ||
-      flash_fifo_get_tail_sector(&tail_sector,fifo)==false)
+  if (flash_fifo_get_tail(&tail,fifo)==false ||
+      flash_fifo_get_head(&head,fifo)==false)
     return false;
   do
   {
-    if (head_sector==tail_sector)
-    {
-      uint32_t tail_index;
-      if (flash_fifo_get_tail_index(&tail_index,fifo,tail_sector)==false)
-        return false;
-      if (head_index+from_top>=tail_index) // Gone over the end
-        return false;
-    }
-    head_index+=from_top;
+    head.index+=from_top;
     from_top=0;
-    if (head_index>=eps)
+    if (head.sector==tail.sector && head.index>=tail.index) // Gone over the end
+      return false;
+    if (head.index>=eps)
     {
-      from_top=head_index-eps;
-      head_index=0;
-      head_sector=flash_fifo_next_data_sector(fifo,head_sector);
+      from_top=head.index-eps;
+      head.index=0;
+      head.sector=flash_fifo_next_data_sector(fifo,head.sector);
       continue; // ensure check for overrun even if from_top==0
     }
     break;
   } while (true);
-  return flash_fifo_read_sample(dst,fifo,head_sector,head_index);
+  return flash_fifo_read_sample(dst,fifo,head.sector,head.index);
 }
 
 API static inline bool flash_fifo_drop_samples(uint32_t from_top)
@@ -639,37 +634,15 @@ API static inline bool flash_fifo_store_sample(const sample_t* s)
   if (!flash_fifo_valid_header(fifo))
     return false;
 
-  data_sector_t tail_sector;
-  uint32_t      tail_index;
+  flash_fifo_slot_t tail;
   uint32_t      eps=fifo->data_entries_per_sector;
 
-  if (flash_fifo_get_tail_sector(&tail_sector,fifo)==false ||
-      flash_fifo_get_tail_index(&tail_index,fifo,tail_sector)==false)
+  if (flash_fifo_get_tail(&tail,fifo)==false)
+    return false;
+  if (flash_fifo_write_sample(s,fifo,tail.sector,tail.index)==false)
     return false;
 
-  if (tail_index+1==eps)
-  {
-    data_sector_t head_sector;
-    if (flash_fifo_get_head_sector(&head_sector,fifo)==false)
-      return false;
-    data_sector_t next_tail_sector=flash_fifo_next_data_sector(fifo,tail_sector);
-    if (next_tail_sector==head_sector)
-    {
-      if (flash_fifo_advance_head_sector(fifo,head_sector)==false)
-        return false;
-    }
-    if (flash_fifo_erase_data_sector(fifo,next_tail_sector)==false)
-      return false;
-  }
-
-  if (flash_fifo_write_sample(s,fifo,tail_sector,tail_index)==false)
-    return false;
-
-  flash_fifo_mark_tail_index(tail_index,fifo,tail_sector);
-  if (tail_index+1==eps)
-  {
-    flash_fifo_advance_tail_sector(fifo,tail_sector);
-  }
+  flash_fifo_mark_tail_index(tail.index,fifo,tail.sector);
   return true;
 }
 
@@ -688,16 +661,29 @@ API static inline bool flash_fifo_prepare(uint32_t tagcount)
 
 #ifdef FAKE_FLASH
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #define FLASH_MAX (ESP8266_FLASH_FIFO_START+ESP8266_FLASH_FIFO_SIZE)
 static uint8_t flash[FLASH_MAX];
 
+void die(void)
+{
+  FILE* f=fopen("flash_at_death.bin","w");
+  if (f)
+  {
+    for (int i=0;i<FLASH_MAX;i++)
+      fputc(flash[i],f);
+    fclose(f);
+  }
+  abort();
+}
+
 UNITTEST SpiFlashOpResult fake_spi_flash_erase_sector(uint16_t sector)
 {
   uint32_t addr=SPI_FLASH_SEC_SIZE*(uint32_t)sector;
   if (addr>=FLASH_MAX || addr+SPI_FLASH_SEC_SIZE>FLASH_MAX)
-    abort();
+    die();
 
   memset(flash+addr,0xff,SPI_FLASH_SEC_SIZE);
   return SPI_FLASH_RESULT_OK;
@@ -706,9 +692,9 @@ UNITTEST SpiFlashOpResult fake_spi_flash_erase_sector(uint16_t sector)
 UNITTEST SpiFlashOpResult fake_spi_flash_write(uint32_t addr, const uint32_t* data, uint32_t len)
 {
   if (addr>=FLASH_MAX || addr+len>FLASH_MAX)
-    abort();
+    die();
   if ((addr&3)!=0 || (len&3)!=0)
-    abort();
+    die();
 
   const uint8_t* bdata=(const uint8_t*)data;
   uint32_t i;
@@ -721,9 +707,9 @@ UNITTEST SpiFlashOpResult fake_spi_flash_write(uint32_t addr, const uint32_t* da
 UNITTEST SpiFlashOpResult fake_spi_flash_read(uint32_t addr, uint32_t* data, uint32_t len)
 {
   if (addr>=FLASH_MAX || addr+len>FLASH_MAX)
-    abort();
+    die();
   if ((addr&3)!=0 || (len&3)!=0)
-    abort();
+    die();
   uint8_t* bdata=(uint8_t*)data;
   uint32_t i;
 
