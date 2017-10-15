@@ -527,6 +527,13 @@ static void progress_work (s4pp_userdata *sud)
             }
             else
             {
+              if ((sud->fifo_pos&511)==511)
+              { // Time to extend the global timeout
+                lua_rawgeti (L, LUA_REGISTRYINDEX, sud->iter_ref);
+                lua_pushinteger (L, sud->fifo_pos);
+                lua_call (L, 1, 0);
+              }
+
               sample_t sample;
               if (flash_fifo_peek_sample(&sample,sud->fifo_pos))
               {
