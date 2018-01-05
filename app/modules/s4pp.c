@@ -860,8 +860,10 @@ static bool handle_line (s4pp_userdata *sud, char *line, uint16_t len)
     if (sud->progress_ref != LUA_NOREF)
       report_progress(sud);
 #ifdef LUA_USE_MODULES_FLASHFIFO
-    flash_fifo_drop_samples (sud->n_used);
-    sud->fifo_pos = 0;
+    if (sud->base) {
+      flash_fifo_drop_samples (sud->n_used);
+      sud->fifo_pos = 0;
+    }
 #endif
     // again, we don't pipeline, so easy to keep track of n_committed
     sud->n_committed += sud->n_used;
