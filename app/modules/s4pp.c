@@ -15,11 +15,18 @@
 #include "../crypto/digests.h"
 #include "../crypto/mech.h"
 #include "strbuffer.h"
+#include "user_interface.h"
 
 #ifdef LUA_USE_MODULES_FLASHFIFO
 # include "rtc/flashfifo.h"
 # define MAX_TAGS 64
 #endif
+
+typedef enum {
+  NTFY_TIME=0,
+  NTFY_FIRMWARE=1,
+  NTFY_FLAGS=2,
+} ntfy_val_t;
 
 #include <stdio.h>
 
@@ -120,6 +127,10 @@ typedef struct
   uint32_t    fifo_pos;
   uint32_t flashdict[MAX_TAGS];
 #endif
+
+  uint32_t connection_initiate_time;
+  uint32_t connect_time;
+  uint32_t hello_time;
 } s4pp_userdata;
 
 static uint16_t max_batch_size = 0; // "use the server setting"
@@ -756,6 +767,10 @@ err:
   abort_conn (sud);
 }
 
+static uint32_t system_time_diff(uint32_t first, uint32_t second)
+{
+  return (second-first)&0x7fffffff;
+}
 
 static void handle_notify (s4pp_userdata *sud, char *ntfy)
 {
@@ -782,6 +797,14 @@ static void handle_notify (s4pp_userdata *sud, char *ntfy)
     lua_pushstring (sud->L, arg);
     ++n_args;
   }
+  if (code==NTFY_TIME && n_args+3<LUA_MINSTACK)
+  {
+    uint32_t now=system_get_time();
+    lua_pushinteger(sud->L, system_time_diff(sud->connection_initiate_time,sud->connect_time));
+    lua_pushinteger(sud->L, system_time_diff(sud->connect_time,sud->hello_time));
+    lua_pushinteger(sud->L, system_time_diff(sud->hello_time,now));
+    n_args+=3;
+  }
   lua_call (sud->L, n_args, 0);
 }
 
@@ -797,6 +820,7 @@ static bool handle_line (s4pp_userdata *sud, char *line, uint16_t len)
     // S4PP/x.y <algo,...> <max_samples> [hidealgo,...]
     if (sud->state > S4PP_INIT)
       goto_err_with_msg (sud->L, "unexpected S4pp hello");
+    sud->hello_time=system_get_time();
 
     char *algos = strchr (line, ' ');
     if (!algos || !strstr (algos, "SHA256"))
@@ -1002,6 +1026,7 @@ static void on_dns_found (const char *name, ip_addr_t *ip, void *arg)
     int res = sud->funcs->connect (&sud->conn);
     if (res == 0)
     {
+      sud->connection_initiate_time=system_get_time();
       lua_pop (L, 1);
       return;
     }
@@ -1019,6 +1044,9 @@ static void on_dns_found (const char *name, ip_addr_t *ip, void *arg)
 static void on_connect(void* arg)
 {
   struct espconn* conn=(struct espconn*)arg;
+  s4pp_userdata *sud = conn->reverse;
+
+  sud->connect_time=system_get_time();
   espconn_set_opt(conn,ESPCONN_REUSEADDR|ESPCONN_COPY);
 }
 
@@ -1180,9 +1208,9 @@ static const LUA_REG_TYPE s4pp_map[] =
 {
   { LSTRKEY("upload"),        LFUNCVAL(s4pp_do_upload) },
   { LSTRKEY("batchsize"),     LFUNCVAL(s4pp_do_batchsize) },
-  { LSTRKEY("NTFY_TIME"),     LNUMVAL(0) },
-  { LSTRKEY("NTFY_FIRMWARE"), LNUMVAL(1) },
-  { LSTRKEY("NTFY_FLAGS"),    LNUMVAL(2) },
+  { LSTRKEY("NTFY_TIME"),     LNUMVAL(NTFY_TIME) },
+  { LSTRKEY("NTFY_FIRMWARE"), LNUMVAL(NTFY_FIRMWARE) },
+  { LSTRKEY("NTFY_FLAGS"),    LNUMVAL(NTFY_FLAGS) },
   XMEM_LUA_TABLE_ENTRY
   { LNILKEY, LNILVAL }
 };
