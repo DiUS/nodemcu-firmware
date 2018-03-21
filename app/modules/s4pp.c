@@ -1049,7 +1049,7 @@ static void on_connect(void* arg)
   s4pp_userdata *sud = conn->reverse;
 
   sud->connect_time=system_get_time();
-  espconn_set_opt(conn,ESPCONN_REUSEADDR|ESPCONN_COPY);
+  espconn_set_opt(conn,ESPCONN_REUSEADDR|ESPCONN_COPY|ESPCONN_NODELAY);
 }
 
 
