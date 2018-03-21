@@ -631,22 +631,21 @@ static int wifi_station_getbroadcast( lua_State* L ){
 // Used by wifi_station_getconfig_xxx
 static int wifi_station_getconfig( lua_State* L, bool get_flash_cfg)
 {
-  struct station_config sta_conf;
+  struct station_config sta_conf = { 0, };
   char temp[sizeof(sta_conf.password)+1]; //max password length + '\0'
-  
+  bool have_cfg;
   if(get_flash_cfg) 
   {
-    wifi_station_get_config_default(&sta_conf);
+    have_cfg = wifi_station_get_config_default(&sta_conf);
   }
   else 
   {
-    wifi_station_get_config(&sta_conf);
+    have_cfg = wifi_station_get_config(&sta_conf);
   }
 
-  if(sta_conf.ssid==0)
+  if(!have_cfg)
   {
-    lua_pushnil(L);
-      return 1;
+    return 0;
   }
   else
   {
@@ -1312,16 +1311,19 @@ static int wifi_ap_getbroadcast( lua_State* L ){
 // Lua: wifi.ap.getconfig()
 static int wifi_ap_getconfig( lua_State* L, bool get_flash_cfg)
 {
-  struct softap_config config;
+  struct softap_config config = { 0, };
   char temp[sizeof(config.password)+1]; //max password length + '\0'
+  bool have_cfg;
   if (get_flash_cfg) 
   {
-    wifi_softap_get_config_default(&config);
+    have_cfg = wifi_softap_get_config_default(&config);
   }
   else 
   {
-    wifi_softap_get_config(&config);
+    have_cfg = wifi_softap_get_config(&config);
   }
+  if (!have_cfg)
+    return 0;
 
   if(lua_isboolean(L, 1) && lua_toboolean(L, 1)==true)
   {
