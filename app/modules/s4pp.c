@@ -714,25 +714,27 @@ static void progress_work (s4pp_userdata *sud)
         }
         sud->buffer_full = true;
         sud->buffer_has_sig = sig;
+        // Encrypt if supposed to
+        if (sud->hide_wanted && sud->hide_supported)
+        {
+          size_t len;
+          char *str = strbuffer_str (sud->buffer, &len);
+
+          int pad = AES_128_BLOCK_SIZE - (len % AES_128_BLOCK_SIZE);
+          if (pad != 0 && pad != AES_128_BLOCK_SIZE)
+          {
+            static const char* newlines="\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n";
+            strbuffer_resize (sud->buffer, len + pad);
+            strbuffer_append(sud->buffer,newlines,pad);
+            update_hmac_from_pad(sud,    newlines,pad);
+            str = strbuffer_str (sud->buffer, &len);
+          }
+          inplace_hide (sud, str, len);
+        }
       }
       // Try sending the buffer. We know it's full, because it either already was, or we just filled it
       size_t len;
       char *str = strbuffer_str (sud->buffer, &len);
-      if (sud->hide_wanted && sud->hide_supported)
-      {
-        int pad = AES_128_BLOCK_SIZE - (len % AES_128_BLOCK_SIZE);
-        if (pad != 0 && pad != AES_128_BLOCK_SIZE)
-        {
-          strbuffer_resize (sud->buffer, len + pad);
-          str = strbuffer_str (sud->buffer, NULL);
-          for (int i = 0; i < pad; ++i)
-            str[len + i] = '\n';
-          if (!sud->buffer_has_sig)
-            update_hmac_from_pad(sud, str + len, pad);
-          len += pad;
-        }
-        inplace_hide (sud, str, len);
-      }
       int res = sud->funcs->send (&sud->conn, str, len);
 
       if (res == 0) // Actually did send. Synchronise state, and reset buffer
