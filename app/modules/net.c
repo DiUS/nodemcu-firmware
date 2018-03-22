@@ -964,15 +964,15 @@ static int net_getdnsserver( lua_State* L ) {
 
 #include "../include/lwip/ip_addr.h"
 #include "../include/lwip/inet.h"
-// Lua: ip_as_string = net.ntop(numeric_ip)
-static int net_ntop( lua_State* L ) {
+// Lua: ip_as_string = net.ntoa(numeric_ip)
+static int net_ntoa( lua_State* L ) {
   uint32_t ip = lua_tointeger(L, 1);
   lua_pushstring( L, inet_ntoa(ip));
   return 1;
 }
 
-// Lua: numeric_ip = net.pton(ip_as_string)
-static int net_pton( lua_State* L ) {
+// Lua: numeric_ip = net.aton(ip_as_string)
+static int net_aton( lua_State* L ) {
   const char* ip = lua_tostring(L, 1);
   lua_pushinteger( L,inet_addr(ip) );
   return 1;
@@ -1036,6 +1036,8 @@ static const LUA_REG_TYPE net_map[] = {
   { LSTRKEY( "createUDPSocket" ),  LFUNCVAL( net_createUDPSocket ) },
   { LSTRKEY( "multicastJoin"),     LFUNCVAL( net_multicastJoin ) },
   { LSTRKEY( "multicastLeave"),    LFUNCVAL( net_multicastLeave ) },
+  { LSTRKEY( "ntoa"),              LFUNCVAL( net_ntoa ) },
+  { LSTRKEY( "aton"),              LFUNCVAL( net_aton ) },
   { LSTRKEY( "dns" ),              LROVAL( net_dns_map ) },
 #ifdef TLS_MODULE_PRESENT
   { LSTRKEY( "cert" ),             LROVAL( tls_cert_map ) },
