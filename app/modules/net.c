@@ -962,6 +962,22 @@ static int net_getdnsserver( lua_State* L ) {
   return 1;
 }
 
+#include "../include/lwip/ip_addr.h"
+#include "../include/lwip/inet.h"
+// Lua: ip_as_string = net.ntop(numeric_ip)
+static int net_ntop( lua_State* L ) {
+  uint32_t ip = lua_tointeger(L, 1);
+  lua_pushstring( L, inet_ntoa(ip));
+  return 1;
+}
+
+// Lua: numeric_ip = net.pton(ip_as_string)
+static int net_pton( lua_State* L ) {
+  const char* ip = lua_tostring(L, 1);
+  lua_pushinteger( L,inet_addr(ip) );
+  return 1;
+}
+
 #pragma mark - Tables
 
 #ifdef TLS_MODULE_PRESENT
