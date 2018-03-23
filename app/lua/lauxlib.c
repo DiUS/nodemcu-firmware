@@ -14,6 +14,7 @@
 #include C_HEADER_STRING
 #ifndef LUA_CROSS_COMPILER
 #include "vfs.h"
+#include "user_interface.h"
 #else
 #endif
 
@@ -790,6 +791,9 @@ static void *l_alloc (void *ud, void *ptr, size_t osize, size_t nsize) {
     return NULL;
   }
   if (L != NULL && (mode & EGC_ALWAYS)) /* always collect memory if requested */
+    luaC_fullgc(L);
+  if (L != NULL && (mode & EGC_ON_MEM_LIMIT) && G(L)->memlimit < 0 &&
+      (system_get_free_heap_size() < (-G(L)->memlimit)))
     luaC_fullgc(L);
   if(nsize > osize && L != NULL) {
 #if defined(LUA_STRESS_EMERGENCY_GC)
