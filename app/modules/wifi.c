@@ -264,6 +264,16 @@ static int wifi_getdefaultmode( lua_State* L )
   return 1;
 }
 
+// Lua: wifi.setchannel()
+static int wifi_setchannel( lua_State* L )
+{
+  unsigned channel;
+
+  channel = luaL_checkinteger( L, 1 );
+  wifi_set_channel(channel);
+  return 0;
+}
+
 // Lua: wifi.getchannel()
 static int wifi_getchannel( lua_State* L )
 {
@@ -1809,6 +1819,7 @@ static const LUA_REG_TYPE wifi_map[] =  {
   { LSTRKEY( "setmode" ),        LFUNCVAL( wifi_setmode ) },
   { LSTRKEY( "getmode" ),        LFUNCVAL( wifi_getmode ) },
   { LSTRKEY( "getdefaultmode" ), LFUNCVAL( wifi_getdefaultmode ) },
+  { LSTRKEY( "setchannel" ),     LFUNCVAL( wifi_setchannel ) },
   { LSTRKEY( "getchannel" ),     LFUNCVAL( wifi_getchannel ) },
   { LSTRKEY( "setphymode" ),     LFUNCVAL( wifi_setphymode ) },
   { LSTRKEY( "getphymode" ),     LFUNCVAL( wifi_getphymode ) },
