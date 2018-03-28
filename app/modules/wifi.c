@@ -996,6 +996,15 @@ static int wifi_station_connect4lua( lua_State* L )
   return 0;  
 }
 
+static int wifi_station_connect_with_channel4lua( lua_State* L )
+{
+  unsigned channel = luaL_checkinteger( L, 1 );
+  wifi_station_connect();
+  if (channel>=1 && channel<=14)
+    wifi_set_channel(channel);
+  return 0;
+}
+
 // Lua: wifi.sta.disconnect()
 static int wifi_station_disconnect4lua( lua_State* L )
 {
@@ -1771,6 +1780,7 @@ static const LUA_REG_TYPE wifi_station_map[] = {
   { LSTRKEY( "clearconfig"),       LFUNCVAL( wifi_station_clear_config ) },
   { LSTRKEY( "config" ),           LFUNCVAL( wifi_station_config ) },
   { LSTRKEY( "connect" ),          LFUNCVAL( wifi_station_connect4lua ) },
+  { LSTRKEY( "connect_with_channel" ),LFUNCVAL( wifi_station_connect_with_channel4lua ) },
   { LSTRKEY( "disconnect" ),       LFUNCVAL( wifi_station_disconnect4lua ) },
   { LSTRKEY( "getap" ),            LFUNCVAL( wifi_station_listap ) },
   { LSTRKEY( "getapindex" ),       LFUNCVAL( wifi_station_get_ap_index ) },
