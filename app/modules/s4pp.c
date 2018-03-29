@@ -761,6 +761,9 @@ static void progress_work (s4pp_userdata *sud)
     }
     case S4PP_COMMITTING:
       break; // just waiting for OK/NOK now
+    case S4PP_DONE:
+      break; // The "OK" receive callback jumped in before the "sent" callback for the last packet. The SDK does not
+             // necessarily work through callbacks in order...
     default:
       goto_err_with_msg (L, "bad state: %d", sud->state);
   }
