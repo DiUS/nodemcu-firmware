@@ -9,6 +9,7 @@ FLASH_SW = -S
 SUBDIRS = 
 
 OBJDUMP = $(or $(shell which objdump),xtensa-lx106-elf-objdump)
+HOSTCC ?= gcc
 
 #############################################################
 # Get the files to pack into the spiffs image
@@ -72,7 +73,7 @@ spiffsscript: remove-image LFSimage spiffsimg/spiffsimg
 
 ifneq ($(LFSSOURCES),)
 LFSimage: $(LFSSOURCES)
-       ../luac.cross -f -o $(FSSOURCE)flash.img $(LFSSOURCES)
+	../luac.cross -f -o $(FSSOURCE)flash.img $(LFSSOURCES)
 else
 LFSimage: 
 	rm -f $(FSSOURCE)flash.img
