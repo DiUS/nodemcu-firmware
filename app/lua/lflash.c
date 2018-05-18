@@ -67,6 +67,10 @@ LUA_API void dumpStrings(lua_State *L) {
 }
 #endif
 
+
+PLATFORM_FLASH_DECLARE_RESERVED(lfs, FLASH_SIZE);
+
+
 /* =====================================================================================
  * The next 4 functions: flashPosition, flashSetPosition, flashBlock and flashErase
  * wrap writing to flash. The last two are platform dependent.  Also note that any
@@ -110,8 +114,7 @@ static void flashErase(uint32_t start, uint32_t end){
 extern void luaL_dbgbreak(void);   //<<<<<<<<<<<<< Temp
 void luaN_user_init(void) {
   curOffset    = 0;
-  flashSector = platform_flash_reserve_section( FLASH_SIZE, &flashAddrPhys );
-  flashAddr   = cast(char *,platform_flash_phys2mapped(flashAddrPhys));
+  platform_flash_reserved_section(lfs, &flashAddr, &flashAddrPhys, &flashSector, NULL);
   NODE_DBG("Flash initialised: %x %08x\n", flashSector, flashAddr); 
 //  luaL_dbgbreak();      //<<<<<<<<<<<<< Temp
 }

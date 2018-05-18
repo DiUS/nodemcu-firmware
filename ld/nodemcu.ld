@@ -245,6 +245,10 @@ SECTIONS
     */libc.a:*.o(.text* .literal*)
     /* end libc functions */
 
+    /* Reserved areas, page aligned and last */
+    . = ALIGN(4096);
+    KEEP(*(.irom.reserved))
+
     _irom0_text_end = ABSOLUTE(.);
     _flash_used_end = ABSOLUTE(.);
   } >irom0_0_seg :irom0_0_phdr =0xffffffff

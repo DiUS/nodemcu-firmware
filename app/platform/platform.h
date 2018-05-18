@@ -265,10 +265,32 @@ uint32_t platform_eth_get_packet_nb( void* buf, uint32_t maxlen );
 void platform_eth_force_interrupt(void);
 uint32_t platform_eth_get_elapsed_time(void);
 
+
+// *****************************************************************************
+// Reserved flash area support. Usage:
+// somefile.c:
+//   PLATFORM_FLASH_DECLARE_RESERVED(my_area_name, 16*1024);
+//   ...
+//   uint32_t addr, phyaddr, sect, sz;
+//   platform_flash_reserved_section(my_area_name, &addr, &phyaddr, &sect, &sz);
+//
+#define _concat(x, y) x ## y
+#define _reserved_name(name) _concat(_flash_reserved_, name)
+#define PLATFORM_FLASH_DECLARE_RESERVED(name, n_bytes) \
+  char _reserved_name(name)[n_bytes] \
+  __attribute__((section(".irom.reserved"),used,unused,aligned(INTERNAL_FLASH_SECTOR_SIZE)))
+
+#define platform_flash_reserved_section(name, \
+  mappedaddrptr, physaddrptr, sectptr, szptr) \
+    platform_flash_reserved_section_internal(_reserved_name(name), \
+      sizeof(_reserved_name(name)), mappedaddrptr, physaddrptr, sectptr, szptr);
+
+// used by the platform_flash_reserved_section() macro, not for direct use
+void platform_flash_reserved_section_internal(char *section, uint32_t sz, char **mappedaddr, uint32_t *physaddr, uint32_t *sector, uint32_t *size);
+
 // *****************************************************************************
 // Internal flash erase/write functions
 
-uint32_t platform_flash_reserve_section( uint32_t regsize, uint32_t *start );
 uint32_t platform_flash_get_first_free_block_address( uint32_t *psect );
 uint32_t platform_flash_get_sector_of_address( uint32_t addr );
 uint32_t platform_flash_mapped2phys (uint32_t mapped_addr);
