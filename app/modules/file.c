@@ -433,7 +433,8 @@ static int file_g_read( lua_State* L, int n, int16_t end_char, int fd )
       luaM_free(L, heap_mem);
       heap_mem = NULL;
     }
-    return 0;
+    lua_pushnil(L);
+    return 1;
   }
 
   vfs_lseek(fd, -(n - i), VFS_SEEK_CUR);
@@ -478,7 +479,7 @@ static int file_readline( lua_State* L )
 {
   GET_FILE_OBJ;
 
-  return file_g_read(L, LUAL_BUFFERSIZE, '\n', fd);
+  return file_g_read(L, FILE_READ_CHUNK, '\n', fd);
 }
 
 // Lua: write("string")

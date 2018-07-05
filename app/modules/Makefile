@@ -50,12 +50,13 @@ INCLUDES += -I ../pcm
 INCLUDES += -I ../platform
 INCLUDES += -I ../spiffs
 INCLUDES += -I ../smart
-INCLUDES += -I ../dhtlib
+INCLUDES += -I ../dht
 INCLUDES += -I ../fatfs
 INCLUDES += -I ../http
 INCLUDES += -I ../sjson
 INCLUDES += -I ../websocket
 INCLUDES += -I ../pm
+INCLUDES += -I ../sqlite3
 PDIR := ../$(PDIR)
 sinclude $(PDIR)Makefile
 

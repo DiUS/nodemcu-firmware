@@ -14,7 +14,7 @@ spiffs fs;
 static u8_t spiffs_work_buf[LOG_PAGE_SIZE*2];
 static u8_t spiffs_fds[sizeof(spiffs_fd) * SPIFFS_MAX_OPEN_FILES];
 #if SPIFFS_CACHE
-static u8_t myspiffs_cache[(LOG_PAGE_SIZE+32)*2];
+static u8_t myspiffs_cache[20 + (LOG_PAGE_SIZE+20)*4];
 #endif
 
 static s32_t my_spiffs_read(u32_t addr, u32_t size, u8_t *dst) {
@@ -58,7 +58,7 @@ static bool myspiffs_set_location(spiffs_config *cfg, int align, int offset, int
 #endif
 #if defined(SPIFFS_FIXED_SIZE)
   cfg->phys_size = SPIFFS_FIXED_SIZE;
-#elif defined(SPIFFS_SIZE_1M_BOUNDARY) && SPIFFS_SIZE_1M_BOUNDARY
+#elif defined(SPIFFS_SIZE_1M_BOUNDARY)
   /* limit to 1-meg boundary (minus param pages) by default */
   uint32_t next_meg = (cfg->phys_addr + 0x100000) & 0xFFF00000;
   cfg->phys_size = next_meg - cfg->phys_addr - (SYS_PARAM_SEC_NUM * INTERNAL_FLASH_SECTOR_SIZE);

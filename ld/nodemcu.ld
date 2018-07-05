@@ -116,13 +116,12 @@ SECTIONS
     /* *libcrypto.a:*(.literal .text) - tested that safe to keep in iROM */
     /* *libdriver.a:*(.literal .text) - not used anywhere in NodeMCU */
     /* *libespnow.a:*(.literal .text) - not used anywhere in NodeMCU */
-    /* *libmesh.a:*(.literal .text) - not used anywhere in NodeMCU */
     /* *liblwip_536.a:*(.literal .text) - source-based library used instead */
     /* *libpwm.a:*(.literal .text) - our own implementation used instead */
     /* *libwpa.a:*(.literal .text) - tested that safe to keep in iROM */
     /* *libwps.a:*(.literal .text) - tested that safe to keep in iROM */
 
-    *(.iram.text .iram0.text)
+    *(.iram.text .iram0.text .iram0.text.*)
     *(.ota.iram0.text .ota.iram0.data)
 
     *(.stub .gnu.warning .gnu.linkonce.literal.* .gnu.linkonce.t.*.literal .gnu.linkonce.t.*)
@@ -208,6 +207,7 @@ SECTIONS
     *(COMMON)
     . = ALIGN (8);
     _bss_end = ABSOLUTE(.);
+    *(.noinit)
     _heap_start = ABSOLUTE(.);
 /*    _stack_sentry = ALIGN(0x8); */
   } >dram0_0_seg :dram0_0_bss_phdr
@@ -234,22 +234,25 @@ SECTIONS
 
     /* Link-time arrays containing the defs for the included modules */
     . = ALIGN(4);
-    lua_libs = ABSOLUTE(.);
+    lua_libs_base = ABSOLUTE(.);
     /* Allow either empty define or defined-to-1 to include the module */
     KEEP(*(.lua_libs))
     LONG(0) LONG(0) /* Null-terminate the array */
-    lua_rotable = ABSOLUTE(.);
+    lua_rotable_base = ABSOLUTE(.);
     KEEP(*(.lua_rotable))
     LONG(0) LONG(0) /* Null-terminate the array */
 
-    /* SDK doesn't use libc functions, and are therefore safe to put in flash */
+    /* SDK doesn't use libc functions, and are therefore safe to put in flash */ 
     */libc.a:*.o(.text* .literal*)
     /* end libc functions */
+
+    /* Reserved areas, flash page aligned and last */
+    . = ALIGN(4096);
+    KEEP(*(.irom.reserved .irom.reserved.*))
 
     _irom0_text_end = ABSOLUTE(.);
     _flash_used_end = ABSOLUTE(.);
   } >irom0_0_seg :irom0_0_phdr =0xffffffff
-
 }
 
 /* get ROM code address */

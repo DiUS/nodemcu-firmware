@@ -43,7 +43,6 @@
 
 static exception_handler_fn load_store_handler;
 
-
 void load_non_32_wide_handler (struct exception_frame *ef, uint32_t cause)
 {
   /* If this is not EXCCAUSE_LOAD_STORE_ERROR you're doing it wrong! */
@@ -81,13 +80,15 @@ die:
        insn, epc1, excvaddr);
 #endif
     /* Turns out we couldn't fix this, so try and chain to the handler
-     * that was set by the SDK. If none then trigger a system break instead
-     * and hang if the break doesn't get handled. This is effectively
-     * what would happen if the default handler was installed. */
+     * that was set. (This is typically a remote GDB break). If none 
+     * then trigger a system break instead and hang if the break doesn't 
+     * get handled. This is effectively what would happen if the default 
+     * handler was installed. */
     if (load_store_handler) {
       load_store_handler(ef, cause);
+      return;
     }
-    asm ("break 1, 1");
+     asm ("break 1, 1");
     while (1) {}
   }
 

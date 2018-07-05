@@ -14,6 +14,8 @@
 #include "driver/uart.h"
 #include "driver/sigma_delta.h"
 
+#define INTERRUPT_TYPE_IS_LEVEL(x)   ((x) >= GPIO_PIN_INTR_LOLEVEL)
+
 #ifdef GPIO_INTERRUPT_ENABLE
 static task_handle_t gpio_task_handle;
 
@@ -106,6 +108,7 @@ static void NO_INTR_CODE set_gpio_no_interrupt(uint8 pin, uint8_t push_pull) {
                    GPIO_REG_READ(GPIO_PIN_ADDR(GPIO_ID_PIN(pnum))) |
                    GPIO_PIN_PAD_DRIVER_SET(GPIO_PAD_DRIVER_ENABLE));      //enable open drain;
   }
+
   ETS_GPIO_INTR_ENABLE();
 }
 
@@ -154,12 +157,15 @@ int platform_gpio_mode( unsigned pin, unsigned mode, unsigned pull )
 
     case PLATFORM_GPIO_INPUT:
       GPIO_DIS_OUTPUT(pin_num[pin]);
-      /* run on */
+      set_gpio_no_interrupt(pin, TRUE);
+      break;
     case PLATFORM_GPIO_OUTPUT:
       set_gpio_no_interrupt(pin, TRUE);
+      GPIO_REG_WRITE(GPIO_ENABLE_W1TS_ADDRESS, BIT(pin_num[pin]));
       break;
     case PLATFORM_GPIO_OPENDRAIN:
       set_gpio_no_interrupt(pin, FALSE);
+      GPIO_REG_WRITE(GPIO_ENABLE_W1TS_ADDRESS, BIT(pin_num[pin]));
       break;
 
 #ifdef GPIO_INTERRUPT_ENABLE
@@ -229,13 +235,29 @@ static void ICACHE_RAM_ATTR platform_gpio_intr_dispatcher (void *dummy){
     if (gpio_status&1) {
       int i = pin_num_inv[j];
       if (pin_int_type[i]) {
-        //disable interrupt
-        gpio_pin_intr_state_set(GPIO_ID_PIN(j), GPIO_PIN_INTR_DISABLE);
+        uint16_t diff = pin_counter[i].seen ^ pin_counter[i].reported;
+
+        pin_counter[i].seen = 0x7fff & (pin_counter[i].seen + 1);
+
+        if (INTERRUPT_TYPE_IS_LEVEL(pin_int_type[i])) {
+          //disable interrupt
+          gpio_pin_intr_state_set(GPIO_ID_PIN(j), GPIO_PIN_INTR_DISABLE);
+        }
         //clear interrupt status
         GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT(j));
-        uint32 level = 0x1 & GPIO_INPUT_GET(GPIO_ID_PIN(j));
-	task_post_high (gpio_task_handle, (now << 8) + (i<<1) + level);
-	// We re-enable the interrupt when we execute the callback
+
+        if (diff == 0 || diff & 0x8000) {
+          uint32 level = 0x1 & GPIO_INPUT_GET(GPIO_ID_PIN(j));
+	  if (!task_post_high (gpio_task_handle, (now << 8) + (i<<1) + level)) {
+            // If we fail to post, then try on the next interrupt
+            pin_counter[i].seen |= 0x8000;
+          }
+          // We re-enable the interrupt when we execute the callback (if level)
+        }
+      } else {
+        // this is an unexpected interrupt so shut it off for now
+        gpio_pin_intr_state_set(GPIO_ID_PIN(j), GPIO_PIN_INTR_DISABLE);
+        GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT(j));
       }
     }
   }
@@ -863,7 +885,7 @@ uint32_t platform_s_flash_write( const void *from, uint32_t toaddr, uint32_t siz
   if(SPI_FLASH_RESULT_OK == r)
     return size;
   else{
-    NODE_ERR( "ERROR in flash_write: r=%d at %08X\n", ( int )r, ( unsigned )toaddr);
+    NODE_ERR( "ERROR in flash_write: r=%d at %p\n", r, toaddr);
     return 0;
   }
 }
@@ -901,26 +923,35 @@ uint32_t platform_s_flash_read( void *to, uint32_t fromaddr, uint32_t size )
   if(SPI_FLASH_RESULT_OK == r)
     return size;
   else{
-    NODE_ERR( "ERROR in flash_read: r=%d at %08X\n", ( int )r, ( unsigned )fromaddr);
+    NODE_ERR( "ERROR in flash_read: r=%d at %p\n", r, fromaddr);
     return 0;
   }
 }
 
 int platform_flash_erase_sector( uint32_t sector_id )
 {
+  NODE_DBG( "flash_erase_sector(%u)\n", sector_id);
   system_soft_wdt_feed ();
   return flash_erase( sector_id ) == SPI_FLASH_RESULT_OK ? PLATFORM_OK : PLATFORM_ERR;
 }
 
-uint32_t platform_flash_mapped2phys (uint32_t mapped_addr)
-{
+static uint32_t flash_map_meg_offset (void) {
   uint32_t cache_ctrl = READ_PERI_REG(CACHE_FLASH_CTRL_REG);
   if (!(cache_ctrl & CACHE_FLASH_ACTIVE))
     return -1;
-  bool b0 = (cache_ctrl & CACHE_FLASH_MAPPED0) ? 1 : 0;
-  bool b1 = (cache_ctrl & CACHE_FLASH_MAPPED1) ? 1 : 0;
-  uint32_t meg = (b1 << 1) | b0;
-  return mapped_addr - INTERNAL_FLASH_MAPPED_ADDRESS + meg * 0x100000;
+  uint32_t m0 = (cache_ctrl & CACHE_FLASH_MAPPED0) ? 0x100000 : 0;
+  uint32_t m1 = (cache_ctrl & CACHE_FLASH_MAPPED1) ? 0x200000 : 0;
+  return m0 + m1;
+}
+
+uint32_t platform_flash_mapped2phys (uint32_t mapped_addr)  {
+  uint32_t meg = flash_map_meg_offset();
+  return (meg&1) ? -1 : mapped_addr - INTERNAL_FLASH_MAPPED_ADDRESS + meg ;
+}
+
+uint32_t platform_flash_phys2mapped (uint32_t phys_addr) {
+  uint32_t meg = flash_map_meg_offset();
+  return (meg&1) ? -1 : phys_addr + INTERNAL_FLASH_MAPPED_ADDRESS - meg;
 }
 
 void* platform_print_deprecation_note( const char *msg, const char *time_frame)

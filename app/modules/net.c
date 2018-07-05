@@ -203,19 +203,22 @@ static void net_recv_cb(lnet_userdata *ud, struct pbuf *p, ip_addr_t *addr, u16_
     return;
   }
 
+  int num_args = 2;
+  char iptmp[16] = { 0, };
+  if (ud->type == TYPE_UDP_SOCKET)
+  {
+    num_args += 2;
+    ets_sprintf(iptmp, IPSTR, IP2STR(&addr->addr));
+  }
+
   lua_State *L = lua_getstate();
   struct pbuf *pp = p;
   while (pp)
   {
-    int num_args = 2;
     lua_rawgeti(L, LUA_REGISTRYINDEX, ud->client.cb_receive_ref);
     lua_rawgeti(L, LUA_REGISTRYINDEX, ud->self_ref);
     lua_pushlstring(L, pp->payload, pp->len);
     if (ud->type == TYPE_UDP_SOCKET) {
-      num_args += 2;
-      char iptmp[16];
-      bzero(iptmp, 16);
-      ets_sprintf(iptmp, IPSTR, IP2STR(&addr->addr));
       lua_pushinteger(L, port);
       lua_pushstring(L, iptmp);
     }
@@ -962,22 +965,6 @@ static int net_getdnsserver( lua_State* L ) {
   return 1;
 }
 
-#include "../include/lwip/ip_addr.h"
-#include "../include/lwip/inet.h"
-// Lua: ip_as_string = net.ntoa(numeric_ip)
-static int net_ntoa( lua_State* L ) {
-  uint32_t ip = lua_tointeger(L, 1);
-  lua_pushstring( L, inet_ntoa(ip));
-  return 1;
-}
-
-// Lua: numeric_ip = net.aton(ip_as_string)
-static int net_aton( lua_State* L ) {
-  const char* ip = lua_tostring(L, 1);
-  lua_pushinteger( L,inet_addr(ip) );
-  return 1;
-}
-
 #pragma mark - Tables
 
 #ifdef TLS_MODULE_PRESENT
@@ -1036,8 +1023,6 @@ static const LUA_REG_TYPE net_map[] = {
   { LSTRKEY( "createUDPSocket" ),  LFUNCVAL( net_createUDPSocket ) },
   { LSTRKEY( "multicastJoin"),     LFUNCVAL( net_multicastJoin ) },
   { LSTRKEY( "multicastLeave"),    LFUNCVAL( net_multicastLeave ) },
-  { LSTRKEY( "ntoa"),              LFUNCVAL( net_ntoa ) },
-  { LSTRKEY( "aton"),              LFUNCVAL( net_aton ) },
   { LSTRKEY( "dns" ),              LROVAL( net_dns_map ) },
 #ifdef TLS_MODULE_PRESENT
   { LSTRKEY( "cert" ),             LROVAL( tls_cert_map ) },
