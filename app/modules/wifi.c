@@ -888,6 +888,8 @@ static int wifi_station_config( lua_State* L )
   struct station_config sta_conf;
   bool auto_connect=true;
   bool save_to_flash=true;
+  bool stay_connected=true;
+
   size_t sl, pl, ml;
 
   memset(&sta_conf, 0, sizeof(sta_conf));
@@ -1083,6 +1085,15 @@ static int wifi_station_config( lua_State* L )
     return luaL_argerror(L, 1, "config table not found!");
   }
 
+  if(!lua_isnoneornil(L, 2))
+  {
+    if(!lua_isboolean(L, 2))
+    {
+      luaL_typerror(L, 2, lua_typename(L, LUA_TBOOLEAN));
+    }
+    stay_connected=lua_toboolean(L, 2);
+  }
+
 #if defined(WIFI_DEBUG)
   char debug_temp[sizeof(sta_conf.password)+1];  //max password length + '\0'
 
@@ -1097,7 +1108,8 @@ static int wifi_station_config( lua_State* L )
   WIFI_DBG("\tsave_to_flash=%s\n", save_to_flash ? "true":"false");
 #endif
 
-  wifi_station_disconnect();
+  if (!stay_connected)
+    wifi_station_disconnect();
 
   bool config_success;
   if(save_to_flash) 
@@ -1110,7 +1122,7 @@ static int wifi_station_config( lua_State* L )
   }
 
   wifi_station_set_auto_connect((uint8)auto_connect);
-  if(auto_connect) 
+  if(auto_connect && !stay_connected)
   {
     wifi_station_connect();
   }
