@@ -19,7 +19,7 @@
 
 #ifdef LUA_USE_MODULES_FLASHFIFO
 # include "rtc/flashfifo.h"
-# define MAX_TAGS 64
+# define MAX_TAGS 128
 #endif
 
 typedef enum {
