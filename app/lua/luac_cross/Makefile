@@ -4,7 +4,10 @@
 # build stands outside this and uses the host toolchain to implement a separate
 # host build of the luac.cross image. 
 #
-.NOTPARALLEL:
+#.NOTPARALLEL:
+Q?=@
+ANSI_REV:=[7m[36m
+ANSI_OFF:=[0m
 
 CCFLAGS:= -I.. -I../../include -I../../../include -I ../../libc
 LDFLAGS:= -L$(SDK_DIR)/lib -L$(SDK_DIR)/ld -lm -ldl -Wl,-Map=mapfile
@@ -74,12 +77,13 @@ ifneq ($(MAKECMDGOALS),clean)
 endif
 
 $(ODIR)/%.o: %.c
+	@echo '$(ANSI_REV)[ cc ]$(ANSI_OFF) $@'
 	@mkdir -p $(ODIR);
-	$(CC) $(if $(findstring $<,$(DSRCS)),$(DFLAGS),$(CFLAGS)) $(COPTS_$(*F)) -o $@ -c $<
+	$Q$(CC) $(if $(findstring $<,$(DSRCS)),$(DFLAGS),$(CFLAGS)) $(COPTS_$(*F)) -o $@ -c $<
 
 $(ODIR)/%.d: %.c
+	@echo '$(ANSI_REV)[ dep]$(ANSI_OFF) $@'
 	@mkdir -p $(ODIR);
-	@echo DEPEND: $(CC) -M $(CFLAGS) $<
 	@set -e; rm -f $@; \
 	$(CC) -M $(CFLAGS) $< > $@.$$$$; \
 	sed 's,\($*\.o\)[ :]*,$(ODIR)/\1 $@ : ,g' < $@.$$$$ > $@; \

@@ -1,6 +1,9 @@
 #  copyright (c) 2010 Espressif System
 #
 .NOTPARALLEL:
+Q?=@
+ANSI_REV:=[7m[36m
+ANSI_OFF:=[0m
 
 # SDK base version, as released by Espressif
 SDK_BASE_VER:=2.2.0
@@ -179,19 +182,21 @@ define MakeLibrary
 DEP_LIBS_$(1) = $$(foreach lib,$$(filter %.a,$$(COMPONENTS_$(1))),$$(dir $$(lib))$$(LIBODIR)/$$(notdir $$(lib)))
 DEP_OBJS_$(1) = $$(foreach obj,$$(filter %.o,$$(COMPONENTS_$(1))),$$(dir $$(obj))$$(OBJODIR)/$$(notdir $$(obj)))
 $$(LIBODIR)/$(1).a: $$(OBJS) $$(DEP_OBJS_$(1)) $$(DEP_LIBS_$(1)) $$(DEPENDS_$(1))
+	@echo '$(ANSI_REV)[ ar ]$(ANSI_OFF) $@'
 	@mkdir -p $$(LIBODIR)
-	$$(if $$(filter %.a,$$?),mkdir -p $$(EXTRACT_DIR)_$(1))
-	$$(if $$(filter %.a,$$?),cd $$(EXTRACT_DIR)_$(1); $$(foreach lib,$$(filter %.a,$$?),$$(AR) xo $$(UP_EXTRACT_DIR)/$$(lib);))
-	$$(AR) ru $$@ $$(filter %.o,$$?) $$(if $$(filter %.a,$$?),$$(EXTRACT_DIR)_$(1)/*.o)
-	$$(if $$(filter %.a,$$?),$$(RM) -r $$(EXTRACT_DIR)_$(1))
+	$$(if $$(filter %.a,$$?),$Qmkdir -p $$(EXTRACT_DIR)_$(1))
+	$$(if $$(filter %.a,$$?),$Qcd $$(EXTRACT_DIR)_$(1); $$(foreach lib,$$(filter %.a,$$?),$$(AR) xo $$(UP_EXTRACT_DIR)/$$(lib);))
+	$Q$$(AR) ru $$@ $$(filter %.o,$$?) $$(if $$(filter %.a,$$?),$$(EXTRACT_DIR)_$(1)/*.o)
+	$$(if $$(filter %.a,$$?),$Q$$(RM) -r $$(EXTRACT_DIR)_$(1))
 endef
 
 define MakeImage
 DEP_LIBS_$(1) = $$(foreach lib,$$(filter %.a,$$(COMPONENTS_$(1))),$$(dir $$(lib))$$(LIBODIR)/$$(notdir $$(lib)))
 DEP_OBJS_$(1) = $$(foreach obj,$$(filter %.o,$$(COMPONENTS_$(1))),$$(dir $$(obj))$$(OBJODIR)/$$(notdir $$(obj)))
 $$(IMAGEODIR)/$(1).out: $$(OBJS) $$(DEP_OBJS_$(1)) $$(DEP_LIBS_$(1)) $$(DEPENDS_$(1))
+	@echo '$(ANSI_REV)[link]$(ANSI_OFF) $@'
 	@mkdir -p $$(IMAGEODIR)
-	$$(CC) $$(LDFLAGS) $$(if $$(LINKFLAGS_$(1)),$$(LINKFLAGS_$(1)),$$(LINKFLAGS_DEFAULT) $$(OBJS) $$(DEP_OBJS_$(1)) $$(DEP_LIBS_$(1))) -o $$@ 
+	$Q$$(CC) $$(LDFLAGS) $$(if $$(LINKFLAGS_$(1)),$$(LINKFLAGS_$(1)),$$(LINKFLAGS_DEFAULT) $$(OBJS) $$(DEP_OBJS_$(1)) $$(DEP_LIBS_$(1))) -o $$@ 
 endef
 
 $(BINODIR)/%.bin: $(IMAGEODIR)/%.out
@@ -245,6 +250,7 @@ clean:
 	$(foreach d, $(SUBDIRS), $(MAKE) -C $(d) clean;)
 	$(RM) -r $(ODIR)/$(TARGET)/$(FLAVOR)
 	$(RM) -r "$(TOP_DIR)/sdk"
+	$(RM) -f luac.cross
 
 clobber: $(SPECIAL_CLOBBER)
 	$(foreach d, $(SUBDIRS), $(MAKE) -C $(d) clobber;)
@@ -308,33 +314,37 @@ endif
 
 
 $(OBJODIR)/%.o: %.c
+	@echo '$(ANSI_REV)[ cc ]$(ANSI_OFF) $@'
 	@mkdir -p $(OBJODIR);
-	$(CC) $(if $(findstring $<,$(DSRCS)),$(DFLAGS),$(CFLAGS)) $(COPTS_$(*F)) -o $@ -c $<
+	$Q$(CC) $(if $(findstring $<,$(DSRCS)),$(DFLAGS),$(CFLAGS)) $(COPTS_$(*F)) -o $@ -c $<
 
 $(OBJODIR)/%.d: %.c
 	@mkdir -p $(OBJODIR);
-	@echo DEPEND: $(CC) -M $(CFLAGS) $<
+	@echo '$(ANSI_REV)[ dep]$(ANSI_OFF) $@'
 	@set -e; rm -f $@; \
 	$(CC) -M $(CFLAGS) $< > $@.$$$$; \
 	sed 's,\($*\.o\)[ :]*,$(OBJODIR)/\1 $@ : ,g' < $@.$$$$ > $@; \
 	rm -f $@.$$$$
 
 $(OBJODIR)/%.o: %.cpp
+	@echo '$(ANSI_REV)[ c++]$(ANSI_OFF) $@'
 	@mkdir -p $(OBJODIR);
-	$(CXX) $(if $(findstring $<,$(DSRCS)),$(DFLAGS),$(CFLAGS)) $(COPTS_$(*F)) -o $@ -c $<
+	$Q$(CXX) $(if $(findstring $<,$(DSRCS)),$(DFLAGS),$(CFLAGS)) $(COPTS_$(*F)) -o $@ -c $<
 
 $(OBJODIR)/%.d: %.cpp
 	@mkdir -p $(OBJODIR);
-	@echo DEPEND: $(CXX) -M $(CFLAGS) $<
+	@echo '$(ANSI_REV)[ dep]$(ANSI_OFF) $@'
 	@set -e; rm -f $@; \
 	sed 's,\($*\.o\)[ :]*,$(OBJODIR)/\1 $@ : ,g' < $@.$$$$ > $@; \
 	rm -f $@.$$$$
 
 $(OBJODIR)/%.o: %.s
+	@echo '$(ANSI_REV)[ asm]$(ANSI_OFF) $@'
 	@mkdir -p $(OBJODIR);
-	$(CC) $(CFLAGS) -o $@ -c $<
+	$Q$(CC) $(CFLAGS) -o $@ -c $<
 
 $(OBJODIR)/%.d: %.s
+	@echo '$(ANSI_REV)[ dep]$(ANSI_OFF) $@'
 	@mkdir -p $(OBJODIR); \
 	set -e; rm -f $@; \
 	$(CC) -M $(CFLAGS) $< > $@.$$$$; \
@@ -342,10 +352,12 @@ $(OBJODIR)/%.d: %.s
 	rm -f $@.$$$$
 
 $(OBJODIR)/%.o: %.S
+	@echo '$(ANSI_REV)[ asm]$(ANSI_OFF) $@'
 	@mkdir -p $(OBJODIR);
-	$(CC) $(CFLAGS) -D__ASSEMBLER__ -o $@ -c $<
+	$Q$(CC) $(CFLAGS) -D__ASSEMBLER__ -o $@ -c $<
 
 $(OBJODIR)/%.d: %.S
+	@echo '$(ANSI_REV)[ dep]$(ANSI_OFF) $@'
 	@mkdir -p $(OBJODIR); \
 	set -e; rm -f $@; \
 	$(CC) -M $(CFLAGS) $< > $@.$$$$; \
@@ -361,19 +373,3 @@ $(foreach bin,$(GEN_BINS),$(eval $(call ShortcutRule,$(bin),$(BINODIR))))
 $(foreach lib,$(GEN_LIBS),$(eval $(call MakeLibrary,$(basename $(lib)))))
 
 $(foreach image,$(GEN_IMAGES),$(eval $(call MakeImage,$(basename $(image)))))
-
-#############################################################
-# Recursion Magic - Don't touch this!!
-#
-# Each subtree potentially has an include directory
-#   corresponding to the common APIs applicable to modules
-#   rooted at that subtree. Accordingly, the INCLUDE PATH
-#   of a module can only contain the include directories up
-#   its parent path, and not its siblings
-#
-# Required for each makefile to inherit from the parent
-#
-
-INCLUDES := $(INCLUDES) -I $(PDIR)include -I $(PDIR)include/$(TARGET)
-PDIR := ../$(PDIR)
-sinclude $(PDIR)Makefile

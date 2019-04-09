@@ -18,7 +18,7 @@
 // 368640].  Note that the last 3 rates are not recommended as these might be
 // unreliable, but 460800 seems to work well for most USB-serial devices.
 
-#define BIT_RATE_DEFAULT BIT_RATE_115200
+#define BIT_RATE_DEFAULT BIT_RATE_1000000
 //#define BIT_RATE_AUTOBAUD
 
 
@@ -73,9 +73,10 @@
 
 #define BUILD_SPIFFS
 //#define SPIFFS_FIXED_LOCATION        0x100000
-//#define SPIFFS_MAX_FILESYSTEM_SIZE    0x20000	
-#define SPIFFS_SIZE_1M_BOUNDARY
-#define SPIFFS_CACHE 1          // Enable if you use you SPIFFS in R/W mode
+//#define SPIFFS_SIZE_1M_BOUNDARY
+//#define SPIFFS_CACHE 1          // Enable if you use you SPIFFS in R/W mode
+#define SPIFFS_FIXED_LOCATION   platform_flash_mapped2phys(INTERNAL_FLASH_MAPPED_ADDRESS+0xc0000)
+#define SPIFFS_MAX_FILESYSTEM_SIZE    0x22000   // 136kb in size, to work around current spiffsimg/nodemcu conflicting logical block size determination
 #define SPIFFS_MAX_OPEN_FILES 4 // maximum number of open files for SPIFFS
 #define FS_OBJ_NAME_LEN 31      // maximum length of a filename
 

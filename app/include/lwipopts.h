@@ -656,7 +656,8 @@
  * DHCP_DOES_ARP_CHECK==1: Do an ARP check on the offered address.
  */
 #ifndef DHCP_DOES_ARP_CHECK
-#define DHCP_DOES_ARP_CHECK             ((LWIP_DHCP) && (LWIP_ARP))
+// #define DHCP_DOES_ARP_CHECK             ((LWIP_DHCP) && (LWIP_ARP))
+#define DHCP_DOES_ARP_CHECK 0
 #endif
 
 /**
@@ -982,7 +983,7 @@
  * TCP_SND_BUF: TCP sender buffer space (bytes). 
  */
 #ifndef TCP_SND_BUF
-#define TCP_SND_BUF                     2 * TCP_MSS
+#define TCP_SND_BUF                     5 * TCP_MSS
 #endif
 
 /**
