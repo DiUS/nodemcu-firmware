@@ -511,7 +511,7 @@ INTERNAL static inline bool flash_fifo_drop_one_sample(const flash_fifo_t* fifo)
 {
   flash_fifo_slot_t head;
   uint32_t      tail_index;
-  uint32_t      eps=fifo->data_entries_per_sector;
+  // uint32_t      eps=fifo->data_entries_per_sector;
 
   if (flash_fifo_get_head(&head,fifo)==false ||
       flash_fifo_get_tail_index(&tail_index,fifo,head.sector)==false)
@@ -630,7 +630,7 @@ API static inline bool flash_fifo_store_sample(const sample_t* s)
     return false;
 
   flash_fifo_slot_t tail;
-  uint32_t      eps=fifo->data_entries_per_sector;
+  // uint32_t      eps=fifo->data_entries_per_sector;
 
   if (flash_fifo_get_tail(&tail,fifo)==false)
     return false;
@@ -651,6 +651,7 @@ API static inline bool flash_fifo_check_magic(void)
 
 API static inline bool flash_fifo_prepare(uint32_t tagcount)
 {
+  (void)tagcount;
   return flash_fifo_init();
 }
 

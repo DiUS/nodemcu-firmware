@@ -28,7 +28,7 @@ static uint32_t fifo_make_tag(const uint8_t* s)
   return tag;
 }
 
-static void fifo_tag_to_string(uint32_t tag, uint8_t s[5])
+static inline void fifo_tag_to_string(uint32_t tag, uint8_t s[5])
 {
   int i;
   s[4]=0;
