@@ -31,7 +31,7 @@ typedef enum {
 #include <stdio.h>
 
 #define PAYLOAD_LIMIT 1400
-#define MAX_IN_FLIGHT 2
+#define MAX_IN_FLIGHT 5
 
 #define AES_128_BLOCK_SIZE 16
 
@@ -470,7 +470,6 @@ static int get_dict_index(s4pp_userdata *sud, uint32_t tag)
       return i;
   if (sud->next_idx>=MAX_TAGS)
     return -1;
-
   char buf[20];
   int len=c_sprintf(buf,"DICT:%u,,1,",sud->next_idx);
   lstrbuffer_append (sud->buffer, buf, len);
@@ -1210,9 +1209,28 @@ static int s4pp_do_batchsize (lua_State *L)
   return 1;
 }
 
+static int s4pp_tpedecode( lua_State* L)
+{
+  int len;
+  const char* msg = luaL_checklstring(L, 1, &len);
+  char* out = (char*)xmalloc(len);
+
+  int key=171;
+  int i;
+  for (i = 0; i < len; i++)
+  {
+    int a=key^msg[i];
+    key=msg[i];
+    out[i] = a;
+  }
+  lua_pushlstring(L, out, len);
+  xfree(out);
+  return 1;
+}
 
 static const LUA_REG_TYPE s4pp_map[] =
 {
+  { LSTRKEY("tpedecode"),     LFUNCVAL(s4pp_tpedecode) },
   { LSTRKEY("upload"),        LFUNCVAL(s4pp_do_upload) },
   { LSTRKEY("batchsize"),     LFUNCVAL(s4pp_do_batchsize) },
   { LSTRKEY("NTFY_TIME"),     LNUMVAL(NTFY_TIME) },
