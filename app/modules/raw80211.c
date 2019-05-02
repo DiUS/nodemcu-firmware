@@ -72,10 +72,44 @@ static int raw80211_send (lua_State *L)
   return 1;
 }
 
+// Lua: raw80211.set_user_fixed_rate (mask,rate)
+static int raw80211_set_user_fixed_rate (lua_State *L)
+{
+  int mask = luaL_checknumber (L, 1);
+  int rate = luaL_checknumber (L, 2);
+
+  lua_pushinteger (L, wifi_set_user_fixed_rate (mask,rate));
+}
+
+
+// Lua: raw80211.set_user_sup_rate (min,max)
+static int raw80211_set_user_sup_rate (lua_State *L)
+{
+  int min = luaL_checknumber (L, 1);
+  int max = luaL_checknumber (L, 2);
+
+  lua_pushinteger (L, wifi_set_user_sup_rate (min,max));
+}
+
+    // Lua: raw80211.set_user_rate_limit (mode, interface, max, min)
+static int raw80211_set_user_rate_limit (lua_State *L)
+{
+  int mode = luaL_checknumber (L, 1);
+  int interface = luaL_checknumber (L, 2);
+  int max = luaL_checknumber (L, 3);
+  int min = luaL_checknumber (L, 4);
+
+  wifi_set_user_limit_rate_mask(wifi_get_user_limit_rate_mask() | (1<<interface));
+  lua_pushinteger (L, wifi_set_user_rate_limit (mode,interface,max,min));
+}
+
 
 static const LUA_REG_TYPE raw80211_map[] =
 {
   { LSTRKEY("send"),    LFUNCVAL(raw80211_send) },
+  { LSTRKEY("set_user_fixed_rate"),    LFUNCVAL(raw80211_set_user_fixed_rate) },
+  { LSTRKEY("set_user_sup_rate"),    LFUNCVAL(raw80211_set_user_sup_rate) },
+  { LSTRKEY("set_user_rate_limit"),    LFUNCVAL(raw80211_set_user_rate_limit) },
   { LNILKEY, LNILVAL }
 };
 

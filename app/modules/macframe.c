@@ -59,7 +59,7 @@ static const char str_payload[]  = "payload";
 static const char str_dest[]     = "destination";
 static const char str_src[]      = "source";
 static const char str_trans[]    = "transmitter";
-static const char str_recv[]     = "received";
+static const char str_recv[]     = "receiver";
 static const char str_bssid[]    = "bssid";
 
 static const char mac_fmt[] = "%02x-%02x-%02x-%02x-%02x-%02x";
