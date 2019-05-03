@@ -484,16 +484,18 @@ static int get_dict_index(s4pp_userdata *sud, uint32_t tag)
 static void add_data(s4pp_userdata* sud, int idx, const sample_t* sample)
 {
   int32_t dt=sample->timestamp-sud->lasttime;
+  uint32_t decimals=sample->decimals&0xff;
+  uint32_t duration=(sample->decimals>>8)&0xffffff;
+
   sud->lasttime=sample->timestamp;
   char buf[40];
   int len=c_sprintf(buf,"%u,%d,%d.",idx,dt,sample->value);
 
-  if (sample->decimals && sample->value!=0) // No matter how much we shift 0, it's still 0
+  if (decimals && sample->value!=0) // No matter how much we shift 0, it's still 0
   {
     int dotpos=len-1; // currently in last place of the string
 
-    int shift=sample->decimals;
-    for (int i=0;i<shift;i++)
+    for (int i=0;i<decimals;i++)
     {
       if (dotpos==len-1 && buf[dotpos-1]=='0') // Trailing zeros after a decimal point
       {
