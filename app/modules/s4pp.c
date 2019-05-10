@@ -131,6 +131,7 @@ typedef struct
   uint32_t connection_initiate_time;
   uint32_t connect_time;
   uint32_t hello_time;
+  uint16_t data_format;
 } s4pp_userdata;
 
 static uint16_t max_batch_size = 0; // "use the server setting"
@@ -481,53 +482,68 @@ static int get_dict_index(s4pp_userdata *sud, uint32_t tag)
   return sud->next_idx++;
 }
 
-static void add_data(s4pp_userdata* sud, int idx, const sample_t* sample)
+static int putValue(char* buf,int32_t value,int32_t decimals)
 {
-  int32_t dt=sample->timestamp-sud->lasttime;
+  char reverse[13];
+  uint32_t pos=0;
+
+  uint32_t v;
+  bool neg=(value<0);
+  if (neg)
+    v=-value;
+  else
+    v=value;
+
+  while (v || decimals>=0)
+  {
+    uint32_t digit=v%10;
+    v=v/10;
+    if (pos && decimals==0)
+      reverse[pos++]='.';
+    if (pos || digit || decimals<=0)
+      reverse[pos++]='0'+digit;
+    decimals--;
+  }
+  if (neg)
+    reverse[pos++]='-';
+  const char* p=&reverse[pos];
+  do {
+    *(buf++)=*(--p);
+  } while (p!=reverse);
+  *buf=0;
+  return pos;
+}
+
+static void add_data(s4pp_userdata* sud, int idx, const sample_t* realPartSample, const sample_t* sample)
+{
   uint32_t decimals=sample->decimals&0xff;
   uint32_t duration=(sample->decimals>>8)&0xffffff;
-
-  sud->lasttime=sample->timestamp;
+  uint32_t t1=sample->timestamp;
+  uint32_t t2=t1+(duration==0xffffff ? 0:duration+1);
+  int32_t dt;
   char buf[40];
-  int len=c_sprintf(buf,"%u,%d,%d.",idx,dt,sample->value);
+  int len;
 
-  if (decimals && sample->value!=0) // No matter how much we shift 0, it's still 0
+
+  if (sud->data_format==0)
   {
-    int dotpos=len-1; // currently in last place of the string
-
-    for (int i=0;i<decimals;i++)
-    {
-      if (dotpos==len-1 && buf[dotpos-1]=='0') // Trailing zeros after a decimal point
-      {
-        buf[dotpos--]='\0';
-        buf[dotpos]='.';
-        len--;
-      }
-      else if (buf[dotpos-1]==',' || buf[dotpos-1]=='-') // Have run out of digits to shift, so insert 0 after dot
-      {
-        for (int j=len;j>dotpos;j--)
-          buf[j+1]=buf[j];
-        buf[dotpos+1]='0';
-        len++;
-      }
-      else // move digit at dotpos-1 past the dot
-      {
-        buf[dotpos]=buf[dotpos-1];
-        buf[--dotpos]='.';
-      }
-    }
-
-    if (buf[dotpos-1]==',' || buf[dotpos-1]=='-') // Have run out of digits to the left of dot, so insert back a 0
-    {
-      for (int j=len;j>=dotpos;j--)
-        buf[j+1]=buf[j];
-      buf[dotpos]='0';
-      dotpos++;
-      len++;
-    }
+    dt=t2-sud->lasttime;
+    sud->lasttime=t2;
+    len=c_sprintf(buf,"%u,%d,",idx,dt);
+    len+=putValue(buf+len,sample->value,decimals);
   }
-  if (buf[len-1]=='.') // If we are trailing a dot, get rid of it
-    --len;
+  else if (sud->data_format==1)
+  {
+    dt=t1-sud->lasttime;
+    sud->lasttime=t1;
+    len=c_sprintf(buf,"%u,%d,%u,",idx,dt,t2-t1);
+    if (realPartSample)
+    {
+      len+=putValue(buf+len,realPartSample->value,decimals);
+      buf[len++]=',';
+    }
+    len+=putValue(buf+len,sample->value,decimals);
+  }
   buf[len++]='\n';
   buf[len]='\0';
   lstrbuffer_append (sud->buffer, buf, len);
@@ -689,10 +705,40 @@ static void progress_work (s4pp_userdata *sud)
               sample_t sample;
               if (!stop && flash_fifo_peek_sample(&sample,sud->fifo_pos))
               {
-                int idx=get_dict_index(sud,sample.tag);
-                if (idx<0)
-                  goto_err_with_msg (L, "dictionary overflowed");
-                add_data(sud,idx,&sample);
+                uint32_t tag=sample.tag;
+
+                uint8_t suffix=tag_char_at_pos(tag,3);
+                bool skip=false;
+                const sample_t* firstPart=NULL;
+                static sample_t lastSample;
+
+                if (sud->data_format==1)
+                {
+                  if (suffix=='I')
+                  {
+                    if (tag_change_char_at_pos(tag,3,'R')==lastSample.tag &&
+                        sample.timestamp==lastSample.timestamp &&
+                        sample.decimals==lastSample.decimals)
+                    {
+                      firstPart=&lastSample;
+                      tag=tag_change_char_at_pos(tag,3,'\0');
+                    }
+                    else
+                      skip=true;
+                  }
+                  else if (suffix=='R')
+                  {
+                    lastSample=sample;
+                    skip=true;
+                  }
+                }
+                if (!skip)
+                {
+                  int idx=get_dict_index(sud,tag);
+                  if (idx<0)
+                    goto_err_with_msg (L, "dictionary overflowed");
+                  add_data(sud,idx,firstPart,&sample);
+                }
                 sud->fifo_pos++;
                 sud->n_used++;
               }
@@ -1101,6 +1147,13 @@ static int s4pp_do_upload (lua_State *L)
     err_out ("no 'key' cfg");
   sud->key_ref = luaL_ref (L, LUA_REGISTRYINDEX);
 
+  lua_getfield (L, 1, "format");
+  if (lua_isnumber (L, -1))
+  {
+    sud->data_format=lua_tonumber(L, -1);
+  }
+  lua_pop (L, 1);
+
 #ifdef LUA_USE_MODULES_FLASHFIFO
   lua_getfield (L, 1, "flashbase");
   if (lua_isstring (L, -1))
@@ -1110,6 +1163,18 @@ static int s4pp_do_upload (lua_State *L)
   }
   lua_pop (L, 1);
 #endif
+
+  if (sud->data_format!=0)
+  {
+#ifdef LUA_USE_MODULES_FLASHFIFO
+    if (sud->data_format>1)
+      err_out("Only formats 0 and 1 supported");
+    if (sud->base==NULL)
+#endif
+    {
+      err_out("callback mode MUST use format 0");
+    }
+  }
 
   sud->conn.type = ESPCONN_TCP;
   sud->conn.proto.tcp = (esp_tcp *)xzalloc (sizeof (esp_tcp));
