@@ -109,6 +109,7 @@ SECTIONS
     *libnet80211.a:*(.literal .text)
     *libphy.a:*(.literal .text)
     *libpp.a:*(.literal .text)
+    *libpp_replaced.a:*(.literal .text)
     *libgcc.a:*(.literal .text)
     
     /* Following SDK libraries have .text sections, but not included in iRAM: */

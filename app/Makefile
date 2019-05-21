@@ -101,7 +101,8 @@ LINKFLAGS_eagle.app.v6 = 			\
 	-lgcc 					\
 	-lhal 					\
 	-lphy 					\
-	-lpp 					\
+	-L../sdk-overrides/lib			\
+	-lpp_replaced				\
 	-lnet80211 				\
 	-lwpa 					\
 	-lwpa2					\
