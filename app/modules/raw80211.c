@@ -79,6 +79,7 @@ static int raw80211_set_user_fixed_rate (lua_State *L)
   int rate = luaL_checknumber (L, 2);
 
   lua_pushinteger (L, wifi_set_user_fixed_rate (mask,rate));
+  return 1;
 }
 
 
@@ -89,6 +90,7 @@ static int raw80211_set_user_sup_rate (lua_State *L)
   int max = luaL_checknumber (L, 2);
 
   lua_pushinteger (L, wifi_set_user_sup_rate (min,max));
+  return 1;
 }
 
     // Lua: raw80211.set_user_rate_limit (mode, interface, max, min)
@@ -101,6 +103,7 @@ static int raw80211_set_user_rate_limit (lua_State *L)
 
   wifi_set_user_limit_rate_mask(wifi_get_user_limit_rate_mask() | (1<<interface));
   lua_pushinteger (L, wifi_set_user_rate_limit (mode,interface,max,min));
+  return 1;
 }
 
 
