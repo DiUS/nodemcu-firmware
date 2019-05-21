@@ -645,7 +645,7 @@ static void progress_work (s4pp_userdata *sud)
       if (!sud->buffer_full)
       {
         if (sud->buffer_need_seq)
-          lstrbuffer_add (sud->buffer, "SEQ:%u,0,1,0\n", sud->next_seq++); // seq:N time:0 timediv:1 datafmt:0
+          lstrbuffer_add (sud->buffer, "SEQ:%u,0,1,%d\n", sud->next_seq++,sud->data_format); // seq:N time:0 timediv:1 datafmt: as given
         sud->buffer_need_seq = false;
 
         lua_State *L = sud->L;
