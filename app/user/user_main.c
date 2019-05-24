@@ -269,6 +269,9 @@ void user_init(void)
     input_sig = task_get_id(handle_input);
     uart_init (br, br, input_sig, &input_sig_flag);
 
+    wifi_set_user_fixed_rate(3,PHY_RATE_6); // Doing this here might be the magic invocation which allows it to actually be effective later?
+    wifi_set_user_fixed_rate(0,PHY_RATE_6); // But make sure we don't *actually* fix the rate for either mode, because usually that's not desired
+
 #ifndef NODE_DEBUG
     system_set_os_print(0);
 #endif
