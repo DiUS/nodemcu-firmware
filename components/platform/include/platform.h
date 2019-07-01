@@ -235,6 +235,7 @@ int platform_flash_erase_sector( uint32_t sector_id );
 // Internal flash partitions
 #define PLATFORM_PARTITION_TYPE_APP     0x00
 #define PLATFORM_PARTITION_TYPE_DATA    0x01
+#define PLATFORM_PARTITION_TYPE_DIUS    0xC1
 #define PLATFORM_PARTITION_TYPE_NODEMCU 0xC2
 
 #define PLATFORM_PARTITION_SUBTYPE_APP_FACTORY 0x00
@@ -247,6 +248,8 @@ int platform_flash_erase_sector( uint32_t sector_id );
 
 #define PLATFORM_PARTITION_SUBTYPE_NODEMCU_SPIFFS 0x00
 #define PLATFORM_PARTITION_SUBTYPE_NODEMCU_LFS    0x01
+
+#define PLATFORM_PARTITION_SUBTYPE_DIUS_FLASHFIFO 0x00
 
 typedef struct {
   uint8_t  label[16];
