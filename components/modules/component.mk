@@ -8,7 +8,7 @@ include $(PROJECT_PATH)/components/modules/uppercase.mk
 
 ifneq (4.0, $(firstword $(sort $(MAKE_VERSION) 4.0)))
   # make versions below 4.0 will fail on the uppercase function used in
-  # the exapnsion of MODULE_NAMES.
+  # the expansion of MODULE_NAMES.
   $(error GNU make version 4.0 or above required)
 endif
 
@@ -36,3 +36,7 @@ ucg.o: ucg_config.h
 
 ucg_config.h: $(BUILD_DIR_BASE)/include/sdkconfig.h
 	perl -w $(PROJECT_PATH)/tools/ucg_config.pl < $^ > $@
+
+ifeq ($(CONFIG_LUA_MODULE_NRFBOOT),y)
+COMPONENT_EMBED_FILES += $(BUILD_DIR_BASE)/nrf.bin
+endif

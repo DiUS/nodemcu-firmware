@@ -153,6 +153,15 @@ config LUA_MODULE_NET
   help
       Includes the net module (recommended).
 
+config LUA_MODULE_NRFBOOT
+  bool "NRF boot protocol / firmware module"
+  default "n"
+  help
+    Includes the nrfboot module.
+    
+    When enabled, expects to find 'nrf.bin' in the build directory,
+    which is the firmware that will be served by this module.
+
 config LUA_MODULE_NODE
   bool "Node module"
   default "y"
