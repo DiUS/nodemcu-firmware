@@ -55,10 +55,11 @@ typedef enum {
 #endif
 
 
-static const uint8_t *fw = NULL;
+static const uint8_t *fw  = NULL;
 static uint32_t fw_len    = 0;
-static state_t state     = SYNCING;
-static uint8_t magic     = BP_MAGIC; // We will choose the actual magic character on SYNC
+static state_t  state     = SYNCING;
+static uint8_t  magic     = BP_MAGIC; // We will choose the actual magic character on SYNC
+static bool     send_done = false;
 
 extern const uint8_t nrf_bin[]     asm("_binary_nrf_bin_start");
 extern const uint8_t nrf_bin_end[] asm("_binary_nrf_bin_end");
@@ -115,7 +116,8 @@ static bool handleByte(lua_State *L, uint8_t c)
     pageno = c;
     if (pageno == BP_NOPAGE) // remote reports done
     {
-      state=SYNCING; // We are done!
+      send_done = true;
+      state = SYNCING; // We are done!
       return false;
     }
 
@@ -164,7 +166,16 @@ static int nrfboot_handlebytes(lua_State *L)
     n += handleByte(L, *bytes);
   if (n > 1)
     lua_concat(L, n);
-  return n ? 1 : 0;
+  if (send_done && state == SYNCING) // got to end, didn't restart
+  {
+    send_done = false;
+    if (n == 0)
+      lua_pushnil(L);
+    lua_pushinteger(L, 1);
+    return 2;
+  }
+  else
+    return n > 0 ? 1 : 0;
 }
 
 
