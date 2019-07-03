@@ -140,6 +140,7 @@ static bool handleByte(lua_State *L, uint8_t c)
     memcpy(resp + sizeof(hdr) + BP_PAGESIZE, &csum, sizeof(csum));
 
     lua_pushlstring(L, (const char *)resp, len);
+    luaM_freemem(L, resp, len);
     state = SYNCING;
     return true;
   }
@@ -161,6 +162,7 @@ static int nrfboot_handlebytes(lua_State *L)
 {
   size_t len;
   const uint8_t *bytes = (const uint8_t *)luaL_checklstring(L, -1, &len);
+  lua_checkstack(L, len);
   int n = 0;
   for (; len; --len, ++bytes)
     n += handleByte(L, *bytes);
