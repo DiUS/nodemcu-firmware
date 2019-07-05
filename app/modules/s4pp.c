@@ -132,6 +132,7 @@ typedef struct
   uint32_t connect_time;
   uint32_t hello_time;
   uint16_t data_format;
+  uint16_t johny_bug;
 } s4pp_userdata;
 
 static uint16_t max_batch_size = 0; // "use the server setting"
@@ -314,6 +315,8 @@ static void create_session_key (s4pp_userdata *sud, const char *token, uint16_t 
   memset (&enc, 0, sizeof(enc));
   lua_rawgeti (sud->L, LUA_REGISTRYINDEX, sud->key_ref);
   enc.key = lua_tolstring (sud->L, -1, &enc.keylen);
+  if (enc.keylen>16 && !sud->johny_bug)
+    enc.keylen=16;
   enc.data = inbytes;
   enc.datalen = AES_128_BLOCK_SIZE;
   enc.out = sud->session_key;
@@ -1151,6 +1154,14 @@ static int s4pp_do_upload (lua_State *L)
   if (lua_isnumber (L, -1))
   {
     sud->data_format=lua_tonumber(L, -1);
+  }
+  lua_pop (L, 1);
+
+  lua_getfield (L, 1, "johny_bug");
+  if (lua_isnumber (L, -1))
+  {
+    sud->johny_bug=lua_tonumber(L, -1);
+    c_printf("johny_bug is %d\n",sud->johny_bug);
   }
   lua_pop (L, 1);
 
