@@ -13,4 +13,4 @@
 	url = https://github.com/nayuki/QR-Code-generator.git
 [submodule "components/s4pp/s4pp-client"]
 	path = components/s4pp/s4pp-client
-	url = git@github.com:DiUS/s4pp-client.git
+	url = https://github.com/DiUS/s4pp-client.git
