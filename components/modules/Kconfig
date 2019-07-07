@@ -189,6 +189,12 @@ config LUA_MODULE_QRCODEGEN
       Includes the QR Code Generator from
       https://www.nayuki.io/page/qr-code-generator-library
 
+config LUA_MODULE_S4PP
+  bool "S4PP module"
+  default "n"
+  help
+      Includes the S4PP module.
+
 config LUA_MODULE_SDMMC
   bool "SD-MMC module"
   default "n"
