@@ -74,6 +74,8 @@ typedef struct s4pp_state
   int userdata_ref;
   unsigned pending_evts;
 
+  struct timeval timestamps[2];
+
   struct s4pp_state *next;
 } s4pp_state_t;
 
@@ -103,8 +105,17 @@ typedef struct netconn_bounce_event {
     uint16_t len; // for sent event
     ip_addr_t addr;
   };
+  struct timeval timestamp;
 } netconn_bounce_event_t;
 
+static netconn_bounce_event_t* allocate_bounce_event(void)
+{
+  netconn_bounce_event_t* e=malloc(sizeof(netconn_bounce_event_t));
+  if (!e)
+    return NULL;
+  gettimeofday(&e->timestamp,NULL);
+  return e;
+}
 
 static s4pp_state_t *active_s4pps;
 static s4pp_conn_t *active_conns;
@@ -267,7 +278,7 @@ static void on_netconn_evt(struct netconn *nc, enum netconn_evt evt, uint16_t le
     default: return;
   }
 
-  netconn_bounce_event_t *nbe = malloc(sizeof(netconn_bounce_event_t));
+  netconn_bounce_event_t *nbe = allocate_bounce_event();
   if (!nbe)
     goto err;
   nbe->netconn = nc;
@@ -311,7 +322,7 @@ err:
 // Caution: This handler runs in the lwIP RTOS task, possibly 2nd core
 static void dns_resolved(const char *name, const ip_addr_t *ipaddr, void *arg)
 {
-  netconn_bounce_event_t *nbe = malloc(sizeof(netconn_bounce_event_t));
+  netconn_bounce_event_t *nbe = allocate_bounce_event();
   if (!nbe)
     goto err;
   nbe->conn = (s4pp_conn_t *)arg;
@@ -358,6 +369,8 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       if (nbe->len && conn->left_to_send == 0)
         s4pp_on_sent(state->ctx);
       // If wanted, we could catch nbe->len == 0 for on-connect notification
+      if (nbe->len==0)
+        state->timestamps[1]=nbe->timestamp;
       break;
     case CONN_EVT_RECV:
     {
@@ -385,6 +398,7 @@ static void handle_conn(task_param_t param, task_prio_t prio)
         goto err;
       netconn_set_nonblocking(conn->netconn, 1);
       netconn_connect(conn->netconn, &conn->resolved_ip, conn->port);
+      state->timestamps[0]=nbe->timestamp;
       break;
     default: break;
   }
@@ -739,9 +753,21 @@ static void on_notify(s4pp_ctx_t *ctx, unsigned code, unsigned nargs, const char
     lua_pushinteger(L, code);
     for (unsigned i = 0; i < nargs; ++i)
       lua_pushstring(L, args[i]);
+    if (code==0)
+    {
+      struct timeval tv;
+      gettimeofday(&tv,NULL);
+
+      lua_pushinteger(L,state->timestamps[0].tv_sec);
+      lua_pushinteger(L,state->timestamps[0].tv_usec);
+      lua_pushinteger(L,state->timestamps[1].tv_sec);
+      lua_pushinteger(L,state->timestamps[1].tv_usec);
+      lua_pushinteger(L,tv.tv_sec);
+      lua_pushinteger(L,tv.tv_usec);
+      nargs+=6;
+    }
     lua_call(L, nargs + 1, 0);
   }
-
   lua_settop(L, top);
 }
 

@@ -1195,6 +1195,22 @@ static void handle_net_event (task_param_t param, task_prio_t prio)
   free (ev);
 }
 
+#include "../include/lwip/ip_addr.h"
+#include "../include/lwip/inet.h"
+// Lua: ip_as_string = net.ntoa(numeric_ip)
+static int net_ntoa( lua_State* L ) {
+  uint32_t ip = lua_tointeger(L, 1);
+  lua_pushstring( L, inet_ntoa(ip));
+  return 1;
+}
+
+// Lua: numeric_ip = net.aton(ip_as_string)
+static int net_aton( lua_State* L ) {
+  const char* ip = lua_tostring(L, 1);
+  lua_pushinteger( L,inet_addr(ip) );
+  return 1;
+}
+
 // --- Tables
 
 LROT_EXTERN(tls_cert);
@@ -1251,7 +1267,11 @@ LROT_BEGIN(net)
 #endif
   LROT_NUMENTRY ( TCP,              TYPE_TCP )
   LROT_NUMENTRY ( UDP,              TYPE_UDP )
+  LROT_FUNCENTRY( ntoa,             net_ntoa )
+  LROT_FUNCENTRY( aton,             net_aton )
+
   LROT_TABENTRY ( __metatable,      net )
+
 LROT_END(net, NULL, 0)
 
 int luaopen_net( lua_State *L ) {
