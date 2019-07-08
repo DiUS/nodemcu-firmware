@@ -74,8 +74,6 @@ typedef struct s4pp_state
   int userdata_ref;
   unsigned pending_evts;
 
-  unsigned num_items;
-
   struct s4pp_state *next;
 } s4pp_state_t;
 
@@ -510,10 +508,11 @@ static void s4pp_handle_event(task_param_t param, task_prio_t prio)
     state->pending_evts ^= SUBMIT_DONE_EVT;
     lua_State *L = lua_getstate();
     int top = lua_gettop(L);
-    lua_checkstack(L, 3);
     s4pp_userdata_t *sud = userdata_from_state(L, state);
+
     luaL_unref(L, LUA_REGISTRYINDEX, sud->submit_ref);
     sud->submit_ref = LUA_NOREF;
+
     if (sud->submit_done_ref != LUA_NOREF)
     {
       lua_rawgeti(L, LUA_REGISTRYINDEX, sud->submit_done_ref);
@@ -560,17 +559,19 @@ static bool on_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
   s4pp_userdata_t *sud = userdata_from_state(L, state);
 
   if (sud->submit_ref == LUA_NOREF)
+  {
+    lua_settop(L, top);
     return false;
+  }
 
   lua_rawgeti(L, LUA_REGISTRYINDEX, sud->submit_ref);
   lua_rawgeti(L, -1, sud->submit_idx++); // get array entry
   if (lua_isnil(L, -1))
   {
-    // we task post so we don't have to deal with nested s4pp_pull calls
-    state->pending_evts |= SUBMIT_DONE_EVT;
-    task_post_medium(s4pp_task, (task_param_t)state);
+    lua_settop(L, top);
     return false;
   }
+
   int entry = lua_gettop(L);
 
   lua_getfield(L, entry, "time");
@@ -594,12 +595,22 @@ static bool on_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
     sample->type = S4PP_FORMATTED;
   }
 
-  ++state->num_items;
-
   // printf("||| %lu %u %s %s\n", sample->timestamp, sample->span, sample->name, sample->val.formatted);
 
   lua_settop(L, top);
   return true;
+}
+
+
+static void on_pull_done(s4pp_ctx_t *ctx)
+{
+  s4pp_state_t *state = (s4pp_state_t *)s4pp_user_arg(ctx);
+  if (!state_is_active(state))
+    return;
+
+  // we task post so we don't have to deal with nested s4pp_pull calls
+  state->pending_evts |= SUBMIT_DONE_EVT;
+  task_post_medium(s4pp_task, (task_param_t)state);
 }
 
 
@@ -623,18 +634,14 @@ static int ls4pp_submit(lua_State *L)
   sud->submit_ref = luaL_ref(L, LUA_REGISTRYINDEX);
   sud->submit_idx = 1;
 
-  // FIXME - need to be able to register a commit handler in the client
-  s4pp_pull(sud->state->ctx, on_pull, NULL);
+  s4pp_pull(sud->state->ctx, on_pull, on_pull_done);
   return 0;
 }
 
 
-static void on_commit(s4pp_ctx_t *ctx, bool success)
+static void on_commit(s4pp_ctx_t *ctx, bool success, unsigned num_items)
 {
   s4pp_state_t *state = (s4pp_state_t *)s4pp_user_arg(ctx);
-
-  unsigned num_items = state->num_items;
-  state->num_items = 0;
 
   lua_State *L = lua_getstate();
   int top = lua_gettop(L);
@@ -659,7 +666,7 @@ static int ls4pp_commit(lua_State *L)
   if (!state_is_active(sud->state) || !sud->state->ctx)
     return luaL_error(L, "s4pp commit after close");
 
-  s4pp_flush(sud->state->ctx, on_commit);
+  s4pp_flush(sud->state->ctx);
 
   return 0;
 }
@@ -843,6 +850,7 @@ static int ls4pp_create(lua_State *L)
     &ios, &state->auth, &state->server, hide, data_format, state);
 
   s4pp_set_notification_handler(state->ctx, on_notify);
+  s4pp_set_commit_handler(state->ctx, on_commit);
 
   lua_settop(L, 2); // discard back to our userdata
   return 1;
