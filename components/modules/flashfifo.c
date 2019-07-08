@@ -157,6 +157,9 @@ static inline void flush_cache(void)
 //  more efficient)
 
 #define FLASH_FIFO_MAGIC         0x64695573
+#define DICT_ENTRY_SIZE          16
+#define DICTIONARY_SHIFT         24
+#define DURATION_SHIFT            4
 
 #define INTERNAL // Just for keeping track
 #define API      // ditto
@@ -175,6 +178,7 @@ typedef struct
   uint32_t sector_size;
   uint32_t head_counter;
   uint32_t tail_counter;
+  uint32_t dictionary;
   uint32_t data;
   uint32_t tail_byte_offset;
   uint32_t data_byte_offset;
@@ -201,7 +205,8 @@ INTERNAL static const flash_fifo_t* flash_fifo_get_header(void)
     .sector_size=SPI_FLASH_SEC_SIZE,
     .head_counter=0,
     .tail_counter=1,
-    .data=2,
+    .dictionary=2,
+    .data=3,
     .tail_byte_offset=32,
     .data_byte_offset=64,
     .data_entries_per_sector=(SPI_FLASH_SEC_SIZE-64)/sizeof(sample_t),
@@ -217,12 +222,10 @@ INTERNAL static const flash_fifo_t* flash_fifo_get_header(void)
       PLATFORM_PARTITION_TYPE_DIUS,
       PLATFORM_PARTITION_SUBTYPE_DIUS_FLASHFIFO,
       NULL);
-
-    hdr.data_sectors = (hdr.partition->size / hdr.sector_size) - 2;
-
+    hdr.data_sectors = (hdr.partition->size / hdr.sector_size) - hdr.data;
     spi_flash_mmap_handle_t ignored;
     esp_partition_mmap(hdr.partition, 0, hdr.partition->size,
-      SPI_FLASH_MMAP_DATA, (const void **)&hdr.mmap, &ignored);
+                       SPI_FLASH_MMAP_DATA, (const void **)&hdr.mmap, &ignored);
   }
   return &hdr;
 }
@@ -266,6 +269,44 @@ INTERNAL static bool flash_fifo_erase_data_sector(const flash_fifo_t* fifo, data
   return flash_fifo_erase_sectors(fifo, fifo->data+sector,1);
 }
 
+INTERNAL static bool flash_fifo_erase_dictionary(const flash_fifo_t* fifo)
+{
+  return flash_fifo_erase_sectors(fifo, fifo->dictionary,1);
+}
+
+INTERNAL static uint32_t flash_fifo_get_dictionary_address(const flash_fifo_t* fifo, int index)
+{
+   return fifo->dictionary*fifo->sector_size+DICT_ENTRY_SIZE*index;
+}
+
+INTERNAL static const uint8_t* flash_fifo_get_dictionary_pointer(const flash_fifo_t* fifo, int index)
+{
+  uint32_t addr=flash_fifo_get_dictionary_address(fifo,index);
+  return (const uint8_t *)(fifo->mmap + addr);
+}
+
+INTERNAL static bool flash_fifo_dict_entry_matches(const flash_fifo_t* fifo, int index, const uint8_t* buf)
+{
+  const uint8_t *entry = flash_fifo_get_dictionary_pointer(fifo,index);
+  return memcmp(entry,buf,DICT_ENTRY_SIZE)==0;
+}
+
+INTERNAL static bool flash_fifo_dict_entry_valid(const flash_fifo_t* fifo, int index)
+{
+  const uint8_t *entry = flash_fifo_get_dictionary_pointer(fifo,index);
+  return entry[DICT_ENTRY_SIZE-1]==0;
+}
+
+INTERNAL static bool flash_fifo_write_dict_entry(const flash_fifo_t* fifo, int index, const uint8_t* buf)
+{
+  uint32_t addr=flash_fifo_get_dictionary_address(fifo,index);
+  esp_err_t err = esp_partition_write(fifo->partition, addr, buf, DICT_ENTRY_SIZE);
+#ifdef CACHE_WORKAROUND
+  flush_cache();
+#endif
+  return err == ESP_OK;
+}
+
 
 /*
 INTERNAL static bool flash_fifo_erase_all_data_sectors(const flash_fifo_t* fifo)
@@ -279,6 +320,7 @@ INTERNAL static bool flash_fifo_clear_content(const flash_fifo_t* fifo)
 {
   return flash_fifo_reset_head_sector_counter(fifo) &&
     flash_fifo_reset_tail_sector_counter(fifo) &&
+    flash_fifo_erase_dictionary(fifo) &&
     // flash_fifo_erase_all_data_sectors(fifo);
     flash_fifo_erase_data_sector(fifo,0); // First sector only. All others will be erased as tail reaches them
 }
@@ -553,6 +595,14 @@ API static uint32_t flash_fifo_get_max_size(void)
   return total_entries-1;
 }
 
+API static const char* flash_fifo_get_dictionary_by_index(int index)
+{
+ const flash_fifo_t* fifo=flash_fifo_get_header();
+  if (!flash_fifo_valid_header(fifo))
+    return NULL;
+  return (const char*)flash_fifo_get_dictionary_pointer(fifo,index);
+}
+
 
 API static bool flash_fifo_peek_sample(sample_t* dst, uint32_t from_top)
 {
@@ -607,17 +657,52 @@ API static bool flash_fifo_pop_sample(sample_t* dst)
   return false;
 }
 
+API static int get_dictionary_index(const flash_fifo_t* fifo, const char* name)
+{
+  size_t l=strlen(name);
+  if (l>DICT_ENTRY_SIZE-1)
+    return -1;
+  uint8_t buf[DICT_ENTRY_SIZE]={0,};
+  memcpy(buf,name,l);
 
-API static bool flash_fifo_store_sample(const sample_t* s)
+  while (1)
+  {
+    for (int i=0;i<fifo->sector_size/DICT_ENTRY_SIZE;i++)
+    {
+      if (flash_fifo_dict_entry_valid(fifo,i))
+      {
+        if (flash_fifo_dict_entry_matches(fifo,i,buf))
+          return i;
+      }
+      else
+      {
+        if (flash_fifo_write_dict_entry(fifo,i,buf))
+          return i;
+        else
+          return -1;
+      }
+    }
+    // Last resort. The dictionary is full....
+    flash_fifo_clear_content(fifo);
+  }
+}
+
+API static bool flash_fifo_store_sample(const sample_t* s, const char* mac)
 {
   const flash_fifo_t* fifo=flash_fifo_get_header();
   if (!flash_fifo_valid_header(fifo))
     return false;
 
+  int mac_dict=get_dictionary_index(fifo,mac);
+  if (mac_dict<0)
+    return false;
+  sample_t ls=*s;
+  ls.decimals|=(mac_dict<<DICTIONARY_SHIFT);
+
   flash_fifo_slot_t tail;
   if (flash_fifo_get_tail(&tail,fifo)==false)
     return false;
-  if (flash_fifo_write_sample(s,fifo,tail.sector,tail.index)==false)
+  if (flash_fifo_write_sample(&ls,fifo,tail.sector,tail.index)==false)
     return false;
 
   flash_fifo_mark_tail_index(tail.index,fifo,tail.sector);
@@ -673,9 +758,19 @@ static int flashfifo_put (lua_State *L)
   sample_t s;
   s.timestamp = luaL_checknumber (L, 1);
   s.value = luaL_checknumber (L, 2);
-  s.decimals = luaL_checknumber (L, 3);
+  unsigned int decimals = luaL_checknumber (L, 3);
+  unsigned int duration = 0;
+  const char* mac="local";
+  size_t maclen=strlen(mac);
+
   size_t len;
   const char *str = luaL_checklstring (L, 4, &len);
+
+  if (!lua_isnoneornil (L, 5))
+    duration=luaL_checknumber (L, 5);
+  if (!lua_isnoneornil (L, 6))
+    mac=luaL_checklstring (L, 6, &maclen);
+
   union {
     uint32_t u;
     char s[4];
@@ -683,7 +778,13 @@ static int flashfifo_put (lua_State *L)
   strncpy (conv.s, str, len > 4 ? 4 : len);
   s.tag = conv.u;
 
-  flash_fifo_store_sample (&s);
+  if (decimals>=(1<<DURATION_SHIFT))
+    luaL_error (L, "Decimals too large!");
+  if (duration>=(1<<(DICTIONARY_SHIFT-DURATION_SHIFT)))
+    luaL_error (L, "Duration too large!");
+
+  s.decimals=decimals|(duration<<4);
+  flash_fifo_store_sample (&s,mac);
   return 0;
 }
 
@@ -692,7 +793,7 @@ static int extract_sample (lua_State *L, const sample_t *s)
 {
   lua_pushnumber (L, s->timestamp);
   lua_pushnumber (L, s->value);
-  lua_pushnumber (L, s->decimals);
+  lua_pushnumber (L, s->decimals&((1<<DURATION_SHIFT)-1));
   union {
     uint32_t u;
     char s[4];
@@ -701,7 +802,11 @@ static int extract_sample (lua_State *L, const sample_t *s)
     lua_pushstring (L, conv.s);
   else
     lua_pushlstring (L, conv.s, 4);
-  return 4;
+  lua_pushnumber (L, (s->decimals>>DURATION_SHIFT)&((1<<(DICTIONARY_SHIFT-DURATION_SHIFT))-1));
+  const char* dict_entry=flash_fifo_get_dictionary_by_index(s->decimals>>DICTIONARY_SHIFT);
+  lua_pushstring(L,dict_entry);
+
+  return 6;
 }
 
 
