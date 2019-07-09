@@ -74,7 +74,7 @@ typedef struct s4pp_state
   int userdata_ref;
   unsigned pending_evts;
 
-  struct timeval timestamps[2];
+  int64_t timestamps[2];
 
   struct s4pp_state *next;
 } s4pp_state_t;
@@ -105,7 +105,7 @@ typedef struct netconn_bounce_event {
     uint16_t len; // for sent event
     ip_addr_t addr;
   };
-  struct timeval timestamp;
+  int64_t timestamp;
 } netconn_bounce_event_t;
 
 static netconn_bounce_event_t* allocate_bounce_event(void)
@@ -113,7 +113,7 @@ static netconn_bounce_event_t* allocate_bounce_event(void)
   netconn_bounce_event_t* e=malloc(sizeof(netconn_bounce_event_t));
   if (!e)
     return NULL;
-  gettimeofday(&e->timestamp,NULL);
+  e->timestamp=esp_timer_get_time();
   return e;
 }
 
@@ -755,16 +755,12 @@ static void on_notify(s4pp_ctx_t *ctx, unsigned code, unsigned nargs, const char
       lua_pushstring(L, args[i]);
     if (code==0)
     {
-      struct timeval tv;
-      gettimeofday(&tv,NULL);
+      int64_t now=esp_timer_get_time();
 
-      lua_pushinteger(L,state->timestamps[0].tv_sec);
-      lua_pushinteger(L,state->timestamps[0].tv_usec);
-      lua_pushinteger(L,state->timestamps[1].tv_sec);
-      lua_pushinteger(L,state->timestamps[1].tv_usec);
-      lua_pushinteger(L,tv.tv_sec);
-      lua_pushinteger(L,tv.tv_usec);
-      nargs+=6;
+      lua_pushnumber(L, (lua_Number)(state->timestamps[0] & 0x1FFFFFFFFFFFFFull));
+      lua_pushnumber(L, (lua_Number)(state->timestamps[1] & 0x1FFFFFFFFFFFFFull));
+      lua_pushnumber(L, (lua_Number)(now & 0x1FFFFFFFFFFFFFull));
+      nargs+=3;
     }
     lua_call(L, nargs + 1, 0);
   }

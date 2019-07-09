@@ -792,7 +792,7 @@ static int flashfifo_put (lua_State *L)
 static int extract_sample (lua_State *L, const sample_t *s)
 {
   lua_pushnumber (L, s->timestamp);
-  lua_pushnumber (L, s->value);
+  lua_pushnumber (L, (int32_t)s->value);
   lua_pushnumber (L, s->decimals&((1<<DURATION_SHIFT)-1));
   union {
     uint32_t u;
