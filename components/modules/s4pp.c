@@ -378,11 +378,14 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       err_t res = netconn_recv(conn->netconn, &nb);
       if (res != ERR_OK || !nb)
         goto err;
-      void *payload;
-      uint16_t len;
-      netbuf_data(nb, &payload, &len);
-      // fwrite(payload, 1, len, stdout);
-      s4pp_on_recv(state->ctx, payload, len);
+      netbuf_first(nb);
+      do {
+        void *payload;
+        uint16_t len;
+        netbuf_data(nb, &payload, &len);
+        // fwrite(payload, 1, len, stdout);
+        s4pp_on_recv(state->ctx, payload, len);
+      } while (netbuf_next(nb) != -1);
       netbuf_delete(nb);
       break;
     }

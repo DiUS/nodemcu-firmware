@@ -250,6 +250,7 @@ int platform_flash_erase_sector( uint32_t sector_id );
 #define PLATFORM_PARTITION_SUBTYPE_NODEMCU_LFS    0x01
 
 #define PLATFORM_PARTITION_SUBTYPE_DIUS_FLASHFIFO 0x00
+#define PLATFORM_PARTITION_SUBTYPE_DIUS_ROMCFG    0x01
 
 typedef struct {
   uint8_t  label[16];
