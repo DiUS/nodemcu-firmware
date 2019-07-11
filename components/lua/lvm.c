@@ -770,6 +770,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         int c = GETARG_C(i);
         int last;
         Table *h;
+        set_block_gc(L);
         fixedstack(L);
         if (n == 0) {
           n = cast_int(L->top - ra) - 1;
@@ -787,6 +788,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         }
         L->top = L->ci->top;
         unfixedstack(L);
+        unset_block_gc(L);
         continue;
       }
       case OP_CLOSE: {
@@ -799,6 +801,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
         int nup, j;
         p = cl->p->p[GETARG_Bx(i)];
         nup = p->nups;
+        set_block_gc(L);
         fixedstack(L);
         ncl = luaF_newLclosure(L, nup, cl->env);
         setclvalue(L, ra, ncl);
@@ -812,6 +815,7 @@ void luaV_execute (lua_State *L, int nexeccalls) {
           }
         }
         unfixedstack(L);
+        unset_block_gc(L);
         Protect(luaC_checkGC(L));
         continue;
       }
