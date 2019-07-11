@@ -92,7 +92,41 @@ static int wifi_stop (lua_State *L)
     0 : luaL_error (L, "failed to stop wifi, code %d", err);
 }
 
+static int wifi_restore (lua_State *L)
+{
+  esp_err_t err = esp_wifi_restore ();
+  return (err == ESP_OK) ?
+    0 : luaL_error (L, "failed to restore wifi, code %d", err);
+}
 
+
+// It's in the IDF, but without any obviously-accessible include file
+int pbkdf2_sha1(const char *passphrase, const char *ssid, size_t ssid_len, int iterations, uint8_t *buf, size_t buflen);
+static int wifi_derive_key (lua_State *L)
+{
+  const char* ssid=luaL_checkstring(L,1);
+  size_t ssid_len = lua_objlen (L, 1);
+  const char* pass=luaL_checkstring(L,2);
+  size_t pass_len = lua_objlen (L, 2);
+
+  char derived[65];
+  if (pass_len==64)
+  {
+    for (int i=0;i<64;i++)
+      derived[i]=pass[i];
+    derived[64]=0;
+  }
+  else
+  {
+    uint8_t key[32];
+    pbkdf2_sha1(pass,ssid,ssid_len,
+                4096,key,sizeof(key));
+    for (int i=0;i<32;i++)
+      sprintf(derived+2*i,"%02x",key[i]);
+  }
+  lua_pushstring(L,derived);
+  return 1;
+}
 
 extern void wifi_ap_init (void);
 extern void wifi_sta_init (void);
@@ -117,6 +151,8 @@ LROT_BEGIN(wifi)
   LROT_FUNCENTRY( mode,                       wifi_mode )
   LROT_FUNCENTRY( start,                      wifi_start )
   LROT_FUNCENTRY( stop,                       wifi_stop )
+  LROT_FUNCENTRY( restore,                    wifi_restore )
+  LROT_FUNCENTRY( derive_key,                 wifi_derive_key )
 
   LROT_TABENTRY ( sta,                        wifi_sta )
   LROT_TABENTRY ( ap,                         wifi_ap )
