@@ -93,6 +93,8 @@ typedef struct {
 } lnet_event;
 
 static task_handle_t net_event;
+static int recv_count=0;
+static SemaphoreHandle_t recv_count_mutex;
 
 
 // --- LWIP errors
@@ -164,6 +166,7 @@ static bool post_net_err (lnet_userdata *ud, err_t err) {
   ev->ud = ud;
   ev->err = err;
   if (!task_post_medium (net_event, (task_param_t)ev)) {
+    printf("Event queue overflow in post_net_err\n");
     free (ev);
     return false;
   }
@@ -178,6 +181,7 @@ static bool post_net_connected (lnet_userdata *ud) {
   ev->event = CONNECTED;
   ev->ud = ud;
   if (!task_post_medium (net_event, (task_param_t)ev)) {
+    printf("Event queue overflow post_net_connected\n");
     free (ev);
     return false;
   }
@@ -194,6 +198,7 @@ static bool post_net_dns (lnet_userdata *ud, const char *name, const ip_addr_t *
   ev->ud = ud;
   ev->resolved_ip = *ipaddr;
   if (!task_post_medium (net_event, (task_param_t)ev)) {
+    printf("Event queue overflow post_net_dns\n");
     free (ev);
     return false;
   }
@@ -213,6 +218,14 @@ static void net_dns_cb(const char *name, const ip_addr_t *ipaddr, void *arg) {
 
 static bool post_net_recv (lnet_userdata *ud)
 {
+  xSemaphoreTake(recv_count_mutex, portMAX_DELAY);
+  bool send_event=(recv_count==0);
+  recv_count++;
+  xSemaphoreGive(recv_count_mutex);
+
+  if (!send_event) // No need to send an event, the consumer still hasn't finished with the previous event
+    return true;
+
   lnet_event *ev = (lnet_event *)malloc (sizeof (lnet_event));
   if (!ev)
     return false;
@@ -222,6 +235,7 @@ static bool post_net_recv (lnet_userdata *ud)
 
   if (!task_post_high (net_event, (task_param_t)ev))
   {
+    printf("Event queue overflow post_net_recv\n");
     free (ev);
     return false;
   }
@@ -236,6 +250,7 @@ static bool post_net_sent (lnet_userdata *ud) {
   ev->event = SENTDATA;
   ev->ud = ud;
   if (!task_post_medium (net_event, (task_param_t)ev)) {
+    printf("Event queue overflow post_net_sent\n");
     free (ev);
     return false;
   }
@@ -250,6 +265,7 @@ static bool post_net_accept (lnet_userdata *ud) {
   ev->event = ACCEPT;
   ev->ud = ud;
   if (!task_post_medium (net_event, (task_param_t)ev)) {
+    printf("Event queue overflow post_net_accept\n");
     free (ev);
     return false;
   }
@@ -1059,6 +1075,76 @@ static void lconnected_cb (lua_State *L, lnet_userdata *ud) {
   }
 }
 
+static void reduce_receive_count(void)
+{
+  xSemaphoreTake(recv_count_mutex, portMAX_DELAY);
+  recv_count--;
+  xSemaphoreGive(recv_count_mutex);
+}
+
+static void lrecv_cb (lua_State *L, lnet_userdata *ud) {
+  if (!ud || !ud->netconn) return;
+
+  int reduce=0;
+  while (true)
+  {
+    xSemaphoreTake(recv_count_mutex, portMAX_DELAY);
+    recv_count-=reduce;
+    bool done=(recv_count==0);
+    xSemaphoreGive(recv_count_mutex);
+
+    if (done)
+      break;
+
+    struct netbuf *p;
+    char *payload;
+    uint16_t len;
+
+    err_t err = netconn_recv(ud->netconn, &p);
+    if (err != ERR_OK || !p) {
+      reduce_receive_count();
+      lwip_lua_checkerr(L, err);
+      return;
+    }
+    static uint32_t total=0;
+
+    netbuf_first(p);
+    do {
+      netbuf_data(p, (void **)&payload, &len);
+      total+=len;
+
+      if (ud->client.cb_receive_ref != LUA_NOREF){
+        lua_rawgeti(L, LUA_REGISTRYINDEX, ud->client.cb_receive_ref);
+        int num_args = 2;
+        lua_rawgeti(L, LUA_REGISTRYINDEX, ud->self_ref);
+        lua_pushlstring(L, payload, len);
+        if (ud->type == TYPE_UDP_SOCKET) {
+          num_args += 2;
+          char iptmp[IP_STR_SZ];
+          ip_addr_t *addr = netbuf_fromaddr(p);
+          uint16_t port = netbuf_fromport(p);
+          ipstr (iptmp, addr);
+          lua_pushinteger(L, port);
+          lua_pushstring(L, iptmp);
+        }
+        lua_call(L, num_args, 0);
+      }
+    } while (netbuf_next(p) != -1);
+    if (p) {
+      netbuf_delete(p);
+
+      if (ud->type == TYPE_TCP_CLIENT) {
+        if (ud->client.hold) {
+          ud->client.num_held += len;
+        } else {
+          netconn_recved(ud->netconn, len);
+        }
+      }
+    }
+    reduce=1;
+  }
+}
+
 static void laccept_cb (lua_State *L, lnet_userdata *ud) {
   if (!ud || !ud->netconn) return;
 
@@ -1088,59 +1174,16 @@ static void laccept_cb (lua_State *L, lnet_userdata *ud) {
     nud->netconn->pcb.tcp->keep_cnt = 1;
   } else
     luaL_error(L, "cannot accept new server socket connection");
-
   lua_call(L, 1, 0);
 
-  while (recvevent-- > 0) {
-    // kick receive callback in case of pending events
-    post_net_recv(nud);
-  }
-}
-
-static void lrecv_cb (lua_State *L, lnet_userdata *ud) {
-  if (!ud || !ud->netconn) return;
-
-  struct netbuf *p;
-  char *payload;
-  uint16_t len;
-
-  err_t err = netconn_recv(ud->netconn, &p);
-  if (err != ERR_OK || !p) {
-    lwip_lua_checkerr(L, err);
-    return;
-  }
-  netbuf_first(p);
-  do {
-    netbuf_data(p, (void **)&payload, &len);
-
-    if (ud->client.cb_receive_ref != LUA_NOREF){
-      lua_rawgeti(L, LUA_REGISTRYINDEX, ud->client.cb_receive_ref);
-      int num_args = 2;
-      lua_rawgeti(L, LUA_REGISTRYINDEX, ud->self_ref);
-      lua_pushlstring(L, payload, len);
-      if (ud->type == TYPE_UDP_SOCKET) {
-        num_args += 2;
-        char iptmp[IP_STR_SZ];
-        ip_addr_t *addr = netbuf_fromaddr(p);
-        uint16_t port = netbuf_fromport(p);
-        ipstr (iptmp, addr);
-        lua_pushinteger(L, port);
-        lua_pushstring(L, iptmp);
-      }
-      lua_call(L, num_args, 0);
-    }
-  } while (netbuf_next(p) != -1);
-
-  if (p) {
-    netbuf_delete(p);
-
-    if (ud->type == TYPE_TCP_CLIENT) {
-      if (ud->client.hold) {
-        ud->client.num_held += len;
-      } else {
-        netconn_recved(ud->netconn, len);
-      }
-    }
+  if (recvevent>0)
+  {
+    xSemaphoreTake(recv_count_mutex, portMAX_DELAY);
+    bool do_recv=(recv_count==0);
+    recv_count+=recvevent;
+    xSemaphoreGive(recv_count_mutex);
+    if (do_recv)
+      lrecv_cb(L,nud); // No need to post, we are already in the right thread
   }
 }
 
@@ -1279,6 +1322,8 @@ int luaopen_net( lua_State *L ) {
   luaL_rometatable(L, NET_TABLE_TCP_SERVER, (void *)net_tcpserver_map);
   luaL_rometatable(L, NET_TABLE_TCP_CLIENT, (void *)net_tcpsocket_map);
   luaL_rometatable(L, NET_TABLE_UDP_SOCKET, (void *)net_udpsocket_map);
+
+  recv_count_mutex = xSemaphoreCreateMutex();
 
   net_event = task_get_id (handle_net_event);
 
