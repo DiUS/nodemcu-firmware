@@ -40,7 +40,7 @@
 #include <nvs.h>
 #include <nvs_flash.h>
 
-_Static_assert(sizeof(lua_Number) == sizeof(uint64_t), "storage size mismatch");
+_Static_assert(sizeof(lua_Number) <= sizeof(uint64_t), "storage size mismatch");
 
 #define NVS_PART "nvsmodule"
 #define NVS_NS "nodemcu"
