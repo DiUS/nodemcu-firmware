@@ -39,6 +39,10 @@ PROJECT_NAME:=NodeMCU
 # conventions for sized integers across the various components.
 BASIC_TYPES=-Du32_t=uint32_t -Du16_t=uint16_t -Du8_t=uint8_t -Ds32_t=int32_t -Ds16_t=int16_t -Duint32=uint32_t -Duint16=uint16_t -Duint8=uint8_t -Dsint32=int32_t -Dsint16=int16_t -Dsint8=int8_t
 
+# Forcibly enable support for NVS encryption, even if general flash encryption
+# is not enabled.
+CXXFLAGS+=-DCONFIG_NVS_ENCRYPTION=1
+
 include $(IDF_PATH)/make/project.mk
 
 # Ensure these overrides are always used

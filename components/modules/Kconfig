@@ -168,6 +168,14 @@ config LUA_MODULE_NODE
   help
       Includes the node module (recommended).
 
+config LUA_MODULE_NVS
+  bool "NVS module"
+  default "n"
+  help
+      Includes the nvs module.
+      This requires a partition named 'nvsmodule' of type data/nvs, not to
+      be confused with the system NVS partition named just 'nvs'.
+
 config LUA_MODULE_OW
   bool "1-Wire module"
   default "y"
