@@ -39,6 +39,7 @@
 #include <assert.h>
 #include <nvs.h>
 #include <nvs_flash.h>
+#include <sys/random.h>
 
 _Static_assert(sizeof(lua_Number) <= sizeof(uint64_t), "storage size mismatch");
 
@@ -218,6 +219,13 @@ static int lnvs_stats(lua_State *L)
   return 3;
 }
 
+static int lnvs_makekey(lua_State *L)
+{
+  char buf[16];
+  getrandom(buf,16,0);
+  lua_pushlstring (L, buf, 16);
+  return 1;
+}
 
 LROT_BEGIN(nvs)
   LROT_FUNCENTRY( init,      lnvs_init )
@@ -226,6 +234,7 @@ LROT_BEGIN(nvs)
   LROT_FUNCENTRY( remove,    lnvs_remove )
   LROT_FUNCENTRY( erase,     lnvs_erase )
   LROT_FUNCENTRY( stats,     lnvs_stats )
+  LROT_FUNCENTRY( makekey,   lnvs_makekey )
 LROT_END(nvs, NULL, 0)
 
 NODEMCU_MODULE(NVS, "nvs", nvs, NULL);
