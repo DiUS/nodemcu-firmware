@@ -452,6 +452,16 @@ static int wifi_sta_scan (lua_State *L)
     return 0;
 }
 
+static int wifi_sta_rssi(lua_State *L)
+{
+  wifi_ap_record_t wifidata;
+  if (esp_wifi_sta_get_ap_info(&wifidata)==0){
+    lua_pushinteger(L, wifidata.rssi);
+    return 1;
+  }
+  return 0;
+}
+
 
 LROT_PUBLIC_BEGIN(wifi_sta)
   LROT_FUNCENTRY( setip,       wifi_sta_setip )
@@ -463,6 +473,7 @@ LROT_PUBLIC_BEGIN(wifi_sta)
   LROT_FUNCENTRY( getmac,      wifi_sta_getmac )
   LROT_FUNCENTRY( on,          wifi_sta_on )
   LROT_FUNCENTRY( scan,        wifi_sta_scan )
+  LROT_FUNCENTRY( rssi,        wifi_sta_rssi)
 LROT_END(wifi_sta, NULL, 0)
 
 
