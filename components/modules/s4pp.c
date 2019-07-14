@@ -74,7 +74,7 @@ typedef struct s4pp_state
   int userdata_ref;
   unsigned pending_evts;
 
-  int64_t timestamps[2];
+  int64_t timestamps[3];
 
   struct s4pp_state *next;
 } s4pp_state_t;
@@ -289,8 +289,19 @@ static void on_netconn_evt(struct netconn *nc, enum netconn_evt evt, uint16_t le
     case NETCONN_EVT_SENDPLUS:
       nbe->evt = CONN_EVT_SENT;
       nbe->len = len;
-      if (!task_post_medium(conn_task, (task_param_t)nbe))
-        goto err;
+      if (len == 0)
+      {
+        // The connection event needs to be high priority, so it doesn't get reordered with the first receive
+        // event. The first receive event will have the time info from S4PP, and thus will cause an attempt to
+        // set the time. We *need* to have seen the connection timestamp before that happens!
+        if (!task_post_high(conn_task, (task_param_t)nbe))
+          goto err;
+      }
+      else
+      {
+        if (!task_post_medium(conn_task, (task_param_t)nbe))
+          goto err;
+      }
       break;
     case NETCONN_EVT_RCVPLUS:
       nbe->evt = CONN_EVT_RECV;
@@ -374,6 +385,8 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       break;
     case CONN_EVT_RECV:
     {
+      if (state->timestamps[2]==0)
+        state->timestamps[2]=nbe->timestamp;
       struct netbuf *nb = NULL;
       err_t res = netconn_recv(conn->netconn, &nb);
       if (res != ERR_OK || !nb)
@@ -400,8 +413,8 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       if (!conn->netconn)
         goto err;
       netconn_set_nonblocking(conn->netconn, 1);
+      state->timestamps[0]=esp_timer_get_time();
       netconn_connect(conn->netconn, &conn->resolved_ip, conn->port);
-      state->timestamps[0]=nbe->timestamp;
       break;
     default: break;
   }
@@ -762,8 +775,9 @@ static void on_notify(s4pp_ctx_t *ctx, unsigned code, unsigned nargs, const char
 
       lua_pushnumber(L, (lua_Number)(state->timestamps[0] & 0x1FFFFFFFFFFFFFull));
       lua_pushnumber(L, (lua_Number)(state->timestamps[1] & 0x1FFFFFFFFFFFFFull));
+      lua_pushnumber(L, (lua_Number)(state->timestamps[2] & 0x1FFFFFFFFFFFFFull));
       lua_pushnumber(L, (lua_Number)(now & 0x1FFFFFFFFFFFFFull));
-      nargs+=3;
+      nargs+=4;
     }
     lua_call(L, nargs + 1, 0);
   }
