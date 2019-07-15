@@ -635,7 +635,7 @@ API static bool flash_fifo_peek_sample(sample_t* dst, uint32_t from_top)
 }
 
 
-API static bool flash_fifo_drop_samples(uint32_t from_top)
+API bool flash_fifo_drop_samples(uint32_t from_top)
 {
   const flash_fifo_t* fifo=flash_fifo_get_header();
   if (!flash_fifo_valid_header(fifo))
@@ -725,6 +725,100 @@ API static bool flash_fifo_prepare(uint32_t tagcount)
 }
 
 
+#if CONFIG_LUA_MODULE_S4PP
+#include "s4pp.h"
+
+int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs)
+{
+  sample_t s;
+  if (!flash_fifo_peek_sample (&s, offs))
+    return 0;
+
+  static char valbuf[32];
+
+  typedef union conv_u {
+    uint32_t u;
+    char s[4];
+  } conv_t;
+  conv_t conv = { s.tag };
+
+  int n = 0;
+  if (conv.s[3] == 'R')
+  {
+    conv_t conv2;
+    sample_t s2;
+    do {
+      if (!flash_fifo_peek_sample (&s2, offs + n + 1))
+        return -n;
+      conv2.u = s2.tag;
+      ++n;
+    } while (conv2.s[3] == 'R');
+
+    if (conv2.s[3] != 'I')
+      return -n;
+
+    if (n > 1)
+    {
+      flash_fifo_peek_sample(&s, offs + n); // reload the correct R
+      conv.u = s.tag;
+    }
+    if (s.timestamp != s2.timestamp ||
+        s.decimals != s2.decimals ||
+        conv.s[0] != conv2.s[0] ||
+        conv.s[1] != conv2.s[1] ||
+        conv.s[2] != conv2.s[2])
+      return -(n + 1);
+
+    char *v = valbuf;
+    itoa(s.value, v, 10);
+    while (*v)
+      ++v;
+    *v++ = ',';
+    itoa(s2.value, v, 10);
+
+    sample->val.formatted = valbuf;
+    sample->type = S4PP_FORMATTED;
+
+    conv.s[3] = 0;
+  }
+  else if (conv.s[3] == 'I')
+    return -1; // nope, stray I, do not want
+  else // simple value
+  {
+    sample->val.formatted = itoa(s.value, valbuf, 10);
+    sample->type = S4PP_FORMATTED;
+  }
+
+  sample->timestamp = s.timestamp;
+  sample->span =
+    (s.decimals>>DURATION_SHIFT)&((1<<(DICTIONARY_SHIFT-DURATION_SHIFT))-1);
+
+  unsigned decis = s.decimals&((1<<DURATION_SHIFT)-1);
+  sample->divisor = 1;
+  while (decis--)
+    sample->divisor *= 10;
+
+  static char namebuf[50];
+  char *p = namebuf;
+  const char *mac =
+    flash_fifo_get_dictionary_by_index(s.decimals>>DICTIONARY_SHIFT);
+  while (*mac)
+    *p++ = *mac++;
+  *p++ = '-';
+  *p++ = 'p';
+  *p++ = '-';
+  *p++ = conv.s[0];
+  *p++ = conv.s[1];
+  *p++ = conv.s[2];
+  *p++ = conv.s[3];
+
+  sample->name = namebuf;
+
+  return n + 1;
+}
+#endif
+
+
 // --- Lua interface -------------------------------------------------------
 
 // flashfifo.prepare ()
@@ -750,7 +844,7 @@ static void check_fifo_magic (lua_State *L)
 }
 
 
-// flashfifo.put (timestamp, value, decimals, sensor_name)
+// flashfifo.put (timestamp, value, decimals, tag, duration, mac)
 static int flashfifo_put (lua_State *L)
 {
   check_fifo_magic (L);

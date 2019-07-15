@@ -76,6 +76,10 @@ typedef struct s4pp_state
   unsigned pending_evts;
 
   int64_t timestamps[3];
+#if CONFIG_LUA_MODULE_FLASHFIFO
+  uint32_t fifo_consumed;
+  int fifo_max; // -1 = no limit
+#endif
 
   struct s4pp_state *next;
 } s4pp_state_t;
@@ -564,19 +568,6 @@ static s4pp_userdata_t *get_userdata(lua_State *L)
 }
 
 
-static int ls4pp_submit_flash_fifo(lua_State *L)
-{
-  s4pp_userdata_t *sud = get_userdata(L);
-  if (!state_is_active(sud->state) || !sud->state->ctx)
-    return luaL_error(L, "s4pp submit after close");
-
-// FIXME
-return luaL_error(L, "not yet implemented!");
-
-  return 0;
-}
-
-
 static bool on_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
 {
   s4pp_state_t *state = (s4pp_state_t *)s4pp_user_arg(ctx);
@@ -668,9 +659,74 @@ static int ls4pp_submit(lua_State *L)
 }
 
 
+#if CONFIG_LUA_MODULE_FLASHFIFO
+extern int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t idx);
+extern bool flash_fifo_drop_samples(uint32_t from_top);
+
+static bool on_fifo_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
+{
+  s4pp_state_t *state = (s4pp_state_t *)s4pp_user_arg(ctx);
+  if (!state_is_active(state))
+    return false;
+
+  if (state->fifo_max != -1 && state->fifo_consumed >= state->fifo_max)
+    return false;
+
+  int n = flash_fifo_fill_s4pp_sample(sample, state->fifo_consumed);
+  if (n < 0)
+  {
+    state->fifo_consumed += -n;
+    return false;
+  }
+  else if (n > 0)
+  {
+    state->fifo_consumed += n;
+    return true;
+  }
+  else
+    return false;
+}
+
+
+// Lua: client:submit_flash_fifo(done_fn, max_n)
+static int ls4pp_submit_flash_fifo(lua_State *L)
+{
+  s4pp_userdata_t *sud = get_userdata(L);
+  if (!state_is_active(sud->state) || !sud->state->ctx)
+    return luaL_error(L, "s4pp submit after close");
+
+  if (sud->submit_ref != LUA_NOREF)
+    return luaL_error(L, "submit already in progress");
+
+  luaL_checkanyfunction(L, 2);
+  sud->state->fifo_max = luaL_optint(L, 3, -1);
+  lua_settop(L, 2); // toss the max_n, if any
+
+  luaL_unref(L, LUA_REGISTRYINDEX, sud->submit_done_ref);
+  sud->submit_done_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+  // note: we only use this as a guard against concurrent submits
+  sud->submit_ref = LUA_REFNIL;
+
+  sud->state->fifo_consumed = 0;
+
+  s4pp_pull(sud->state->ctx, on_fifo_pull, on_pull_done);
+
+  return 0;
+}
+#endif
+
+
 static void on_commit(s4pp_ctx_t *ctx, bool success, unsigned num_items)
 {
   s4pp_state_t *state = (s4pp_state_t *)s4pp_user_arg(ctx);
+
+#if CONFIG_LUA_MODULE_FLASHFIFO
+  if (success && state->fifo_consumed)
+  {
+    flash_fifo_drop_samples(state->fifo_consumed);
+    state->fifo_consumed = 0;
+  }
+#endif
 
   lua_State *L = lua_getstate();
   int top = lua_gettop(L);
@@ -913,7 +969,9 @@ static int ls4pp_sessions(lua_State *L)
 
 LROT_BEGIN(s4pp_instance)
   LROT_FUNCENTRY( on,                 ls4pp_on )
+#if CONFIG_LUA_MODULE_FLASHFIFO
   LROT_FUNCENTRY( submit_flash_fifo,  ls4pp_submit_flash_fifo )
+#endif
   LROT_FUNCENTRY( submit,             ls4pp_submit )
   LROT_FUNCENTRY( commit,             ls4pp_commit )
   LROT_FUNCENTRY( close,              ls4pp_close )
