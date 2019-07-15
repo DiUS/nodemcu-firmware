@@ -768,24 +768,7 @@ static int ls4pp_status(lua_State *L)
 }
 
 
-static int ls4pp_close(lua_State *L)
-{
-  s4pp_userdata_t *sud = get_userdata(L);
-
-  // suppress any error callbacks that might otherwise have been triggered
-  // by the tearing down of the connection
-  unref_and_clear(L, sud->error_ref);
-
-  if (state_is_active(sud->state))
-  {
-    s4pp_state_t *state = sud->state;
-    sud->state = NULL;
-    free_s4pp_state(L, state);
-  }
-  return 0;
-}
-
-
+// Note: also used for client:close()
 static int ls4pp_gc(lua_State *L)
 {
   s4pp_userdata_t *sud = get_userdata(L);
@@ -974,7 +957,7 @@ LROT_BEGIN(s4pp_instance)
 #endif
   LROT_FUNCENTRY( submit,             ls4pp_submit )
   LROT_FUNCENTRY( commit,             ls4pp_commit )
-  LROT_FUNCENTRY( close,              ls4pp_close )
+  LROT_FUNCENTRY( close,              ls4pp_gc )
   LROT_FUNCENTRY( status,             ls4pp_status )
   LROT_FUNCENTRY( __gc,               ls4pp_gc )
   LROT_TABENTRY(  __index,            s4pp_instance )
