@@ -1154,7 +1154,7 @@ static void lerr_cb (lua_State *L, lnet_userdata *ud, err_t err)
 
 // Lua: ip_as_string = net.ntoa(numeric_ip)
 static int net_ntoa( lua_State* L ) {
-  uint32_t ip = lua_tointeger(L, 1);
+  uint32_t ip = luaL_checknumber(L, 1);
   lua_pushstring( L, inet_ntoa(ip));
   return 1;
 }
@@ -1162,7 +1162,7 @@ static int net_ntoa( lua_State* L ) {
 
 // Lua: numeric_ip = net.aton(ip_as_string)
 static int net_aton( lua_State* L ) {
-  const char* ip = lua_tostring(L, 1);
+  const char* ip = luaL_checkstring(L, 1);
   lua_pushinteger( L,inet_addr(ip) );
   return 1;
 }
