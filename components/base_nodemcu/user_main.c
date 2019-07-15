@@ -27,6 +27,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
+#include <esp_task.h>
+#include <esp_log.h>
 
 #define SIG_LUA 0
 #define SIG_UARTINPUT 1
@@ -144,8 +146,10 @@ void nodemcu_init(void)
 }
 
 
-void app_main (void)
+void nodemcu_main (void *unused)
 {
+  (void)unused;
+
   task_init();
 
   esp_event_queue =
@@ -177,4 +181,31 @@ void app_main (void)
   start_lua ();
   task_pump_messages ();
   __builtin_unreachable ();
+}
+
+
+void app_main(void)
+{
+#define fmt "Lua VM core affinity: %s"
+#if CONFIG_FREERTOS_UNICORE || CONFIG_NODEMCU_TASK_AFFINITY_CORE0
+  // Only one core available, or already bound to it, no point juggling
+  ESP_LOGI("main", fmt, "PRO");
+  nodemcu_main(NULL);
+#else
+  int core;
+# if CONFIG_NODEMCU_TASK_AFFINITY_NONE
+  core = tskNO_AFFINITY;
+  ESP_LOGI("main", fmt, "none");
+# elif CONFIG_NODEMCU_TASK_AFFINITY_CORE1
+  core = 1;
+  ESP_LOGI("main", fmt, "APP");
+# else
+#  error "NodeMCU task affinity configuration broken"
+# endif
+  xTaskCreatePinnedToCore(
+    nodemcu_main, "main", // the old "main" task dies when we exit app_main
+    ESP_TASK_MAIN_STACK, NULL,
+    ESP_TASK_MAIN_PRIO, NULL, core);
+#endif
+#undef fmt
 }

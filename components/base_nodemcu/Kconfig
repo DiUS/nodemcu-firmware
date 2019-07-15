@@ -1,5 +1,19 @@
 menu "NodeMCU miscellaneous"
 
+choice NODEMCU_TASK_AFFINITY
+  depends on !FREERTOS_UNICORE
+  prompt "Lua VM core affinity"
+  default NODEMCU_TASK_AFFINITY_NONE
+
+config NODEMCU_TASK_AFFINITY_NONE
+  bool "None (move between cores as needed)"
+config NODEMCU_TASK_AFFINITY_CORE0
+  bool "Core 0 (PRO cpu)"
+config NODEMCU_TASK_AFFINITY_CORE1
+  bool "Core 1 (APP cpu)"
+
+endchoice
+
 choice LUA_OPTIMIZE_DEBUG_LEVEL
   prompt "Discard debug info in compiled Lua"
   default LUA_OPTIMIZE_DEBUG_NONE
