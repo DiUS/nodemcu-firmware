@@ -221,9 +221,9 @@ static int lnvs_stats(lua_State *L)
 
 static int lnvs_makekey(lua_State *L)
 {
-  char buf[16];
-  getrandom(buf,16,0);
-  lua_pushlstring (L, buf, 16);
+  char buf[32];
+  getrandom(buf,32,0);
+  lua_pushlstring (L, buf, 32);
   return 1;
 }
 
