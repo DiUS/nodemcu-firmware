@@ -43,7 +43,8 @@
 #define S4PP_TABLE_INSTANCE "s4pp.instance"
 
 #define free_and_clear(p) do { free(p); p = NULL; } while (0)
-
+#define unref_and_clear(L, r) \
+  do { luaL_unref(L, LUA_REGISTRYINDEX, r); r = LUA_NOREF; } while(0)
 
 typedef struct s4pp_conn {
   ip_addr_t resolved_ip;
@@ -150,8 +151,8 @@ static s4pp_state_t *new_s4pp_state(void)
 
 static bool state_is_active(s4pp_state_t *state)
 {
-  for (s4pp_state_t **i = &active_s4pps; *i; i = &(*i)->next)
-    if (*i == state)
+  for (s4pp_state_t *i = active_s4pps; i; i = i->next)
+    if (i == state)
       return true;
   return false;
 }
@@ -192,7 +193,7 @@ static void free_s4pp_state(lua_State *L, s4pp_state_t *state)
   free_and_clear(state->auth.key_bytes);
   free_and_clear(state->server.hostname);
 
-  luaL_unref(L, LUA_REGISTRYINDEX, state->userdata_ref);
+  unref_and_clear(L, state->userdata_ref);
 
   free(state);
 }
@@ -484,7 +485,7 @@ static bool io_send(s4pp_conn_t *conn, const char *data, uint16_t len)
 {
   if (!conn_is_active(conn))
   {
-    ESP_LOGE("s4pp", "io_send() non non-active conn?!");
+    ESP_LOGE("s4pp", "io_send() on non-active conn?!");
     return false;
   }
   // fwrite(data, 1, len, stdout);
@@ -540,14 +541,12 @@ static void s4pp_handle_event(task_param_t param, task_prio_t prio)
     int top = lua_gettop(L);
     s4pp_userdata_t *sud = userdata_from_state(L, state);
 
-    luaL_unref(L, LUA_REGISTRYINDEX, sud->submit_ref);
-    sud->submit_ref = LUA_NOREF;
+    unref_and_clear(L, sud->submit_ref);
 
     if (sud->submit_done_ref != LUA_NOREF)
     {
       lua_rawgeti(L, LUA_REGISTRYINDEX, sud->submit_done_ref);
-      luaL_unref(L, LUA_REGISTRYINDEX, sud->submit_done_ref);
-      sud->submit_done_ref = LUA_NOREF;
+      unref_and_clear(L, sud->submit_done_ref);
       lua_call(L, 0, 0);
     }
     lua_settop(L, top);
@@ -719,8 +718,7 @@ static int ls4pp_close(lua_State *L)
 
   // suppress any error callbacks that might otherwise have been triggered
   // by the tearing down of the connection
-  luaL_unref(L, LUA_REGISTRYINDEX, sud->error_ref);
-  sud->error_ref = LUA_NOREF;
+  unref_and_clear(L, sud->error_ref);
 
   if (state_is_active(sud->state))
   {
@@ -736,12 +734,11 @@ static int ls4pp_gc(lua_State *L)
 {
   s4pp_userdata_t *sud = get_userdata(L);
 
-  luaL_unref(L, LUA_REGISTRYINDEX, sud->notify_ref);
-  sud->notify_ref = LUA_NOREF;
-  luaL_unref(L, LUA_REGISTRYINDEX, sud->commit_ref);
-  sud->commit_ref = LUA_NOREF;
-  luaL_unref(L, LUA_REGISTRYINDEX, sud->error_ref);
-  sud->error_ref = LUA_NOREF;
+  unref_and_clear(L, sud->notify_ref);
+  unref_and_clear(L, sud->commit_ref);
+  unref_and_clear(L, sud->error_ref);
+  unref_and_clear(L, sud->submit_ref);
+  unref_and_clear(L, sud->submit_done_ref);
 
   if (state_is_active(sud->state))
   {
@@ -896,6 +893,24 @@ static int ls4pp_create(lua_State *L)
 }
 
 
+static int ls4pp_sessions(lua_State *L)
+{
+  size_t n = 0;
+  for (s4pp_state_t *i = active_s4pps; i; i = i->next)
+    ++n;
+
+  lua_settop(L, 0);
+  lua_createtable(L, n, 0);
+
+  for (s4pp_state_t *i = active_s4pps; i; i = i->next)
+  {
+    lua_rawgeti(L, LUA_REGISTRYINDEX, i->userdata_ref);
+    lua_rawseti(L, 1, n--);
+  }
+  return 1;
+}
+
+
 LROT_BEGIN(s4pp_instance)
   LROT_FUNCENTRY( on,                 ls4pp_on )
   LROT_FUNCENTRY( submit_flash_fifo,  ls4pp_submit_flash_fifo )
@@ -909,7 +924,8 @@ LROT_END(s4pp_instance, NULL, 0)
 
 
 LROT_BEGIN(s4pp)
-  LROT_FUNCENTRY( create, ls4pp_create )
+  LROT_FUNCENTRY( create,   ls4pp_create )
+  LROT_FUNCENTRY( sessions, ls4pp_sessions )
 LROT_END(s4pp, NULL, 0)
 
 
