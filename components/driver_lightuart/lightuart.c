@@ -66,6 +66,10 @@ static void IRAM_ATTR lightuart_isr (void *arg)
   // posted about it. A bit dangerous, but much easier on the post queue.
   bool should_post = xQueueIsQueueEmptyFromISR(lu->rx_q);
 
+  // If we flag an error below, also set rx_rdy if there's stuff in the queue.
+  if (!should_post)
+    events |= LIGHTUART_RX_RDY;
+
   uart_dev_t *dev = uarts[lu->uart_no];
 
   uint32_t ints = dev->int_st.val;
@@ -203,12 +207,20 @@ void lightuart_init (uint32_t uart_no, const LightUartSetup_t *cfg, task_handle_
 
   uart_dev_t *dev = uarts[uart_no];
 
+  // The rxfifo_rst flag is apparently broken for uart1/2, and the rxfifo_cnt
+  // does not appear to be entirely reliable either.
+  while (dev->mem_rx_status.wr_addr != dev->mem_rx_status.rd_addr)
+  {
+    (void)dev->fifo.rw_byte;
+  }
+
   dev->int_ena.rxfifo_full = 1;
   dev->int_ena.rxfifo_tout = 1;
   dev->int_ena.rxfifo_ovf = 1;
   dev->int_ena.frm_err = 1;
 
   dev->conf0.val = 0;
+
   dev->conf0.tick_ref_always_on = 1; // 80MHz clock, not the 1MHz one please
   dev->conf0.bit_num = cfg->data_bits;
   dev->conf0.parity_en = cfg->parity != LIGHTUART_PARITY_NONE;
