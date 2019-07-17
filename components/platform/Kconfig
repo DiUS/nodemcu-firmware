@@ -74,6 +74,80 @@ config CONSOLE_BIT_RATE_AUTO
       If you are doing advanced things with the console, you may want
       to disable this feature.
 
+config LIGHT_UART_DRIVER
+  bool "Light UART driver"
+  default "n"
+  help
+    Use a lightweight, IRAM'd UART driver instead of the heavier, more
+    fuller-featured but slower IDF driver. This can make it possible
+    to use high speeds (e.g. 1MHz) on the UART even when writing to
+    flash. If using the IDF driver, data would frequently get lost
+    as their ISR is in flash, and thus not accessible while writing or
+    erasing flash.
+
+config LIGHT_UART_DRIVER_Q_SIZE_RX0
+  depends on LIGHT_UART_DRIVER
+  int "RX queue size for UART0"
+  default 256
+  help
+    The rx queue size to use for UART0 when using the light uart driver.
+    This is a buffer used to/from the UART ISR. For high-speed scenarios,
+    it can be very helpful to increase the rx size.  The ISR trying
+    to write to a full rx buffer results in lost data and an error
+    event posted.
+
+config LIGHT_UART_DRIVER_Q_SIZE_TX0
+  depends on LIGHT_UART_DRIVER
+  int "TX queue size for UART0"
+  default 256
+  help
+    The tx queue size to use for UART0 when using the light uart driver.
+    This is a buffer used to/from the UART ISR. In some scenarios it
+    can be helpful to increase the tx size. Writing to a full tx buffer
+    blocks the calling RTOS task.
+
+config LIGHT_UART_DRIVER_Q_SIZE_RX1
+  depends on LIGHT_UART_DRIVER
+  int "RX queue size for UART1"
+  default 256
+  help
+    The rx queue size to use for UART0 when using the light uart driver.
+    This is a buffer used to/from the UART ISR. For high-speed scenarios,
+    it can be very helpful to increase the rx size.  The ISR trying
+    to write to a full rx buffer results in lost data and an error
+    event posted.
+
+config LIGHT_UART_DRIVER_Q_SIZE_TX1
+  depends on LIGHT_UART_DRIVER
+  int "TX queue size for UART1"
+  default 256
+  help
+    The tx queue size to use for UART0 when using the light uart driver.
+    This is a buffer used to/from the UART ISR. In some scenarios it
+    can be helpful to increase the tx size. Writing to a full tx buffer
+    blocks the calling RTOS task.
+
+config LIGHT_UART_DRIVER_Q_SIZE_RX2
+  depends on LIGHT_UART_DRIVER
+  int "RX queue size for UART2"
+  default 256
+  help
+    The rx queue size to use for UART0 when using the light uart driver.
+    This is a buffer used to/from the UART ISR. For high-speed scenarios,
+    it can be very helpful to increase the rx size.  The ISR trying
+    to write to a full rx buffer results in lost data and an error
+    event posted.
+
+config LIGHT_UART_DRIVER_Q_SIZE_TX2
+  depends on LIGHT_UART_DRIVER
+  int "TX queue size for UART2"
+  default 256
+  help
+    The tx queue size to use for UART0 when using the light uart driver.
+    This is a buffer used to/from the UART ISR. In some scenarios it
+    can be helpful to increase the tx size. Writing to a full tx buffer
+    blocks the calling RTOS task.
+
 config NODE_DEBUG
   bool "Enable NODE_DBG() output"
   default "n"

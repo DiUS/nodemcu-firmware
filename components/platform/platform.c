@@ -3,6 +3,7 @@
 #include "driver/sigmadelta.h"
 #include "driver/adc.h"
 #include "driver/uart.h"
+#include "driver/lightuart.h"
 #include <stdio.h>
 #include <string.h>
 #include <freertos/semphr.h>
@@ -33,13 +34,59 @@ int platform_gpio_output_exists( unsigned gpio ) { return GPIO_IS_VALID_OUTPUT_G
 #define PLATFORM_UART_EVENT_BREAK    (UART_EVENT_MAX + 4)
 
 static const char *UART_TAG = "uart";
+extern bool uart_on_data_cb(unsigned id, const char *buf, size_t len);
+extern bool uart_on_error_cb(unsigned id, const char *buf, size_t len);
 
 uart_status_t uart_status[NUM_UART];
 
+#if CONFIG_LIGHT_UART_DRIVER
+
+static task_handle_t uart_task;
+
+void handle_lightuart_events(task_param_t param, task_prio_t prio)
+{
+  int events = LIGHTUART_EVENT(param);
+  uint32_t uart_no = LIGHTUART_NO(param);
+
+  static const char *err_msgs[] = {
+    "frame error",
+    "hardware overflow",
+    "software overflow",
+  };
+  if (events & LIGHTUART_FRAME_ERR)
+    uart_on_error_cb(uart_no, err_msgs[0], strlen(err_msgs[0]));
+  if (events & LIGHTUART_HW_OVF)
+    uart_on_error_cb(uart_no, err_msgs[1], strlen(err_msgs[1]));
+  if (events & LIGHTUART_SOFT_OVF)
+    uart_on_error_cb(uart_no, err_msgs[2], strlen(err_msgs[2]));
+
+  if (events & LIGHTUART_RX_RDY)
+  {
+    uart_status_t *us = &uart_status[uart_no];
+    char ch;
+    while (lightuart_read_bytes(uart_no, &ch, 1, 0) == 1)
+    {
+      us->line_buffer[us->line_position++] = ch;
+
+      uint16_t need_len = us->need_len;
+      int16_t end_char = us->end_char;
+      size_t max_wanted =
+        (end_char >= 0 && need_len == 0) ? LUA_MAXINPUT : need_len;
+      bool at_end = (us->line_position >= max_wanted);
+      bool end_char_found =
+        (end_char >= 0 && (uint8_t)ch == (uint8_t)end_char);
+      if (at_end || end_char_found) {
+        uart_on_data_cb(uart_no, us->line_buffer, us->line_position);
+        us->line_position = 0;
+      }
+    }
+  }
+}
+
+#else
+
 SemaphoreHandle_t sem = NULL;
 
-extern bool uart_on_data_cb(unsigned id, const char *buf, size_t len);
-extern bool uart_on_error_cb(unsigned id, const char *buf, size_t len);
 task_handle_t uart_event_task_id = 0;
 
 void uart_event_task( task_param_t param, task_prio_t prio ) {
@@ -53,14 +100,13 @@ void uart_event_task( task_param_t param, task_prio_t prio ) {
   us = & uart_status[id];
   xSemaphoreGive(sem);
   if(post->type == PLATFORM_UART_EVENT_DATA) {
-    need_len = us->need_len;
-    end_char = us->end_char;
-
     for(size_t p = 0; p < post->size; p++) {
       ch = post->data[p];
       us->line_buffer[us->line_position] = ch;
       us->line_position++;
 
+      need_len = us->need_len;
+      end_char = us->end_char;
       size_t max_wanted =
         (end_char >= 0 && need_len == 0) ? LUA_MAXINPUT : need_len;
       bool at_end = (us->line_position >= max_wanted);
@@ -173,6 +219,7 @@ static void task_uart( void *pvParameters ){
     }
   }
 }
+#endif
 
 // pins must not be null for non-console uart
 uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int parity, int stopbits, uart_pins_t* pins )
@@ -212,6 +259,53 @@ uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int pari
   }
   else
   {
+#if CONFIG_LIGHT_UART_DRIVER
+    static const unsigned q_sizes[] = {
+      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_RX0,
+      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_TX0,
+      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_RX1,
+      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_TX1,
+      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_RX2,
+      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_TX2,
+    };
+    LightUartSetup_t cfg;
+    cfg.bit_rate = baud;
+    switch (databits)
+    {
+      case 5: cfg.data_bits = LIGHTUART_NUM_BITS_5; break;
+      case 6: cfg.data_bits = LIGHTUART_NUM_BITS_6; break;
+      case 7: cfg.data_bits = LIGHTUART_NUM_BITS_7; break;
+      case 8: // fall-through
+      default: cfg.data_bits = LIGHTUART_NUM_BITS_8; break;
+    }
+    switch (parity)
+    {
+      case PLATFORM_UART_PARITY_EVEN: cfg.parity = LIGHTUART_PARITY_EVEN; break;
+      case PLATFORM_UART_PARITY_ODD:  cfg.parity = LIGHTUART_PARITY_ODD; break;
+      default: // fall-through
+      case PLATFORM_UART_PARITY_NONE: cfg.parity = LIGHTUART_PARITY_NONE; break;
+    }
+    switch (stopbits)
+    {
+      default: // fall-through
+      case PLATFORM_UART_STOPBITS_1:
+        cfg.stop_bits = LIGHTUART_STOP_BITS_1; break;
+      case PLATFORM_UART_STOPBITS_1_5:
+        cfg.stop_bits = LIGHTUART_STOP_BITS_1_5; break;
+      case PLATFORM_UART_STOPBITS_2:
+        cfg.stop_bits = LIGHTUART_STOP_BITS_2; break;
+    }
+    cfg.tx_io = pins->tx_pin;
+    cfg.rx_io = pins->rx_pin;
+
+    cfg.rx_q_size = q_sizes[id*2 + 0];
+    cfg.tx_q_size = q_sizes[id*2 + 1];
+
+    if (!uart_task)
+      uart_task = task_get_id(handle_lightuart_events);
+
+    lightuart_init(id, &cfg, uart_task, TASK_PRIORITY_HIGH);
+#else
     int flow_control = UART_HW_FLOWCTRL_DISABLE;
     if(pins->flow_control & PLATFORM_UART_FLOW_CTS) flow_control |= UART_HW_FLOWCTRL_CTS;
     if(pins->flow_control & PLATFORM_UART_FLOW_RTS) flow_control |= UART_HW_FLOWCTRL_RTS;
@@ -256,13 +350,18 @@ uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int pari
                         );
 
     if(uart_event_task_id == 0) uart_event_task_id = task_get_id( uart_event_task );
-
+#endif
     return baud;
   }
 }
 
 void platform_uart_setmode(unsigned id, unsigned mode)
 {
+#if CONFIG_LIGHT_UART_DRIVER
+  (void)id;
+  (void)mode;
+  ESP_LOGW(UART_TAG, "mode setting not supported in light uart driver");
+#else
 	uart_mode_t uartMode;
 	
 	switch(mode)
@@ -280,6 +379,7 @@ void platform_uart_setmode(unsigned id, unsigned mode)
 			uartMode = UART_MODE_UART; break;
 	}
 	uart_set_mode(id, uartMode);
+#endif
 }
 
 void platform_uart_send_multi( unsigned id, const char *data, size_t len )
@@ -290,7 +390,11 @@ void platform_uart_send_multi( unsigned id, const char *data, size_t len )
         putchar (data[ i ]);
     }
   } else {
+#if CONFIG_LIGHT_UART_DRIVER
+    lightuart_write_bytes(id, data, len);
+#else
     uart_write_bytes(id, data, len);
+#endif
   }
 }
 
@@ -299,7 +403,11 @@ void platform_uart_send( unsigned id, uint8_t data )
   if (id == CONSOLE_UART)
     putchar (data);
   else
+#if CONFIG_LIGHT_UART_DRIVER
+    lightuart_write_bytes(id, &data, 1);
+#else
     uart_write_bytes(id, (const char *)&data, 1);
+#endif
 }
 
 void platform_uart_flush( unsigned id )
@@ -314,7 +422,12 @@ int platform_uart_start( unsigned id )
   if (id == CONSOLE_UART)
     return 0;
   else {
-    uart_status_t *us = & uart_status[id];
+    uart_status_t *us = &uart_status[id];
+
+#if CONFIG_LIGHT_UART_DRIVER
+    us->line_buffer = malloc(LUA_MAXINPUT);
+    us->line_position = 0;
+#else
     
     esp_err_t ret = uart_driver_install(id, UART_BUFFER_SIZE, UART_BUFFER_SIZE, 3, & us->queue, 0);
     if(ret != ESP_OK) {
@@ -336,7 +449,8 @@ int platform_uart_start( unsigned id )
       us->line_buffer = NULL;
       return -1;
     }
-  return 0;
+#endif
+    return 0;
   }
 }
 
@@ -346,15 +460,39 @@ void platform_uart_stop( unsigned id )
     ;
   else {
     uart_status_t *us = & uart_status[id];  
+#if CONFIG_LIGHT_UART_DRIVER
+   free(us->line_buffer);
+   us->line_buffer = NULL;
+#else
     uart_driver_delete(id);
     if(us->line_buffer) free(us->line_buffer);
     us->line_buffer = NULL;
     if(us->taskHandle) vTaskDelete(us->taskHandle);
     us->taskHandle = NULL;
+#endif
   }
 }
 
 int platform_uart_get_config(unsigned id, uint32_t *baudp, uint32_t *databitsp, uint32_t *parityp, uint32_t *stopbitsp) {
+#if CONFIG_LIGHT_UART_DRIVER
+    LightUartSetup_t cfg;
+    lightuart_getconfig(id, &cfg);
+    *baudp = cfg.bit_rate;
+    switch(cfg.data_bits)
+    {
+      case CONSOLE_NUM_BITS_5: *databitsp = 5; break;
+      case CONSOLE_NUM_BITS_6: *databitsp = 6; break;
+      case CONSOLE_NUM_BITS_7: *databitsp = 7; break;
+      case CONSOLE_NUM_BITS_8: *databitsp = 8; break;
+    }
+    switch(cfg.parity)
+    {
+      case CONSOLE_PARITY_NONE: *parityp = UART_PARITY_DISABLE; break;
+      case CONSOLE_PARITY_ODD:  *parityp = UART_PARITY_ODD; break;
+      case CONSOLE_PARITY_EVEN: *parityp = UART_PARITY_EVEN; break;
+    }
+    *stopbitsp = cfg.stop_bits;
+#else
     int err;
 
     err = uart_get_baudrate(id, baudp);
@@ -387,7 +525,7 @@ int platform_uart_get_config(unsigned id, uint32_t *baudp, uint32_t *databitsp, 
 
     err = uart_get_stop_bits(id, stopbitsp);
     if (err != ESP_OK) return -1;
-
+#endif
     return 0;
 }
 
