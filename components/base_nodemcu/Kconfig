@@ -3,10 +3,14 @@ menu "NodeMCU miscellaneous"
 choice NODEMCU_TASK_AFFINITY
   depends on !FREERTOS_UNICORE
   prompt "Lua VM core affinity"
-  default NODEMCU_TASK_AFFINITY_NONE
+  default NODEMCU_TASK_AFFINITY_CORE1
+  help
+    Select the core to run the Lua VM on. In theory the Lua VM task could
+    be allowed to be scheduled on either core, but in practice this does
+    not work well. Experience has shown that it easily breaks gpio triggers,
+    and it likely also breaks other things that rely on interrupt service
+    routines, as these are installed and bound per-core.
 
-config NODEMCU_TASK_AFFINITY_NONE
-  bool "None (move between cores as needed)"
 config NODEMCU_TASK_AFFINITY_CORE0
   bool "Core 0 (PRO cpu)"
 config NODEMCU_TASK_AFFINITY_CORE1

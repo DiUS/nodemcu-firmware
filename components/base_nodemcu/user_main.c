@@ -192,20 +192,11 @@ void app_main(void)
   ESP_LOGI("main", fmt, "PRO");
   nodemcu_main(NULL);
 #else
-  int core;
-# if CONFIG_NODEMCU_TASK_AFFINITY_NONE
-  core = tskNO_AFFINITY;
-  ESP_LOGI("main", fmt, "none");
-# elif CONFIG_NODEMCU_TASK_AFFINITY_CORE1
-  core = 1;
   ESP_LOGI("main", fmt, "APP");
-# else
-#  error "NodeMCU task affinity configuration broken"
-# endif
   xTaskCreatePinnedToCore(
     nodemcu_main, "main", // the old "main" task dies when we exit app_main
     ESP_TASK_MAIN_STACK, NULL,
-    ESP_TASK_MAIN_PRIO, NULL, core);
+    ESP_TASK_MAIN_PRIO, NULL, 1);
 #endif
 #undef fmt
 }
