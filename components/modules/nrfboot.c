@@ -59,6 +59,7 @@ static const uint8_t *fw  = NULL;
 static uint32_t fw_len    = 0;
 static state_t  state     = SYNCING;
 static uint8_t  magic     = BP_MAGIC; // We will choose the actual magic character on SYNC
+static uint8_t  exp_page  = 0;
 static bool     send_done = false;
 
 extern const uint8_t nrf_bin[]     asm("_binary_nrf_bin_start");
@@ -114,11 +115,23 @@ static bool handleByte(lua_State *L, uint8_t c)
     }
 
     pageno = c;
-    if (pageno == BP_NOPAGE) // remote reports done
+    if (pageno == BP_NOPAGE && exp_page == (fw_len/BP_PAGESIZE + 1)) // remote reports done
     {
       send_done = true;
       state = SYNCING; // We are done!
       return false;
+    }
+
+    if (pageno != exp_page && pageno != (exp_page - 1))
+    {
+      const uint8_t eof[] = { magic, BP_PAGESEQ };
+      const size_t len = sizeof(eof) + BP_PAGESIZE + sizeof(uint16_t);
+      uint8_t *resp = luaM_malloc(L, len);
+      memcpy(resp, eof, sizeof(eof));
+      lua_pushlstring(L, (const char *)resp, len);
+      luaM_freemem(L, resp, len);
+      state = SYNCING;
+      return true;
     }
 
     if ((int)pageno*BP_PAGESIZE >= fw_len)
@@ -129,6 +142,7 @@ static bool handleByte(lua_State *L, uint8_t c)
       return true;
     }
 
+    exp_page = pageno + 1;
     const uint8_t  hdr[2] = { magic, pageno };
     const uint8_t *page = fw + BP_PAGESIZE*pageno;
     const uint16_t csum = crc16(CRC16_START, page, BP_PAGESIZE);
@@ -154,6 +168,7 @@ static int nrfboot_restart(lua_State *L)
   fw_len = 0;
   state  = SYNCING;
   magic  = BP_MAGIC;
+  exp_page = 0;
   return 0;
 }
 
