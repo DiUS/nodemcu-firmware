@@ -67,6 +67,8 @@ typedef struct
   int                 rx_io; // -1 = don't set
   size_t              tx_q_size;
   size_t              rx_q_size;
+  bool                tx_inv;
+  bool                rx_inv;
 } LightUartSetup_t;
 
 #define LIGHTUART_RX_RDY     0x01

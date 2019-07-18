@@ -227,6 +227,8 @@ void lightuart_init (uint32_t uart_no, const LightUartSetup_t *cfg, task_handle_
   dev->conf0.parity = cfg->parity & 0x1;
   dev->conf0.stop_bit_num = cfg->stop_bits;
   dev->conf0.err_wr_mask = 0;
+  dev->conf0.txd_inv = cfg->tx_inv;
+  dev->conf0.rxd_inv = cfg->rx_inv;
 
   dev->conf1.val = 0;
   dev->conf1.rx_tout_en = 1;

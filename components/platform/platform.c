@@ -301,6 +301,17 @@ uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int pari
     cfg.rx_q_size = q_sizes[id*2 + 0];
     cfg.tx_q_size = q_sizes[id*2 + 1];
 
+    static const bool invs[] = {
+      CONFIG_LIGHT_UART_DRIVER_INV_RX0,
+      CONFIG_LIGHT_UART_DRIVER_INV_TX0,
+      CONFIG_LIGHT_UART_DRIVER_INV_RX1,
+      CONFIG_LIGHT_UART_DRIVER_INV_TX1,
+      CONFIG_LIGHT_UART_DRIVER_INV_RX2,
+      CONFIG_LIGHT_UART_DRIVER_INV_TX2,
+    };
+    cfg.rx_inv = invs[id*2 + 0];
+    cfg.tx_inv = invs[id*2 + 1];
+
     if (!uart_task)
       uart_task = task_get_id(handle_lightuart_events);
 

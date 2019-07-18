@@ -148,6 +148,48 @@ config LIGHT_UART_DRIVER_Q_SIZE_TX2
     can be helpful to increase the tx size. Writing to a full tx buffer
     blocks the calling RTOS task.
 
+config LIGHT_UART_DRIVER_INV_RX0
+  depends on LIGHT_UART_DRIVER
+  bool "Invert RX on UART0"
+  default "n"
+  help
+    Whether the RX signal on UART0 is inverted.
+
+config LIGHT_UART_DRIVER_INV_TX0
+  depends on LIGHT_UART_DRIVER
+  bool "Invert TX on UART0"
+  default "n"
+  help
+    Whether to invert the TX signal on UART0.
+
+config LIGHT_UART_DRIVER_INV_RX1
+  depends on LIGHT_UART_DRIVER
+  bool "Invert RX on UART1"
+  default "n"
+  help
+    Whether the RX signal on UART0 is inverted.
+
+config LIGHT_UART_DRIVER_INV_TX1
+  depends on LIGHT_UART_DRIVER
+  bool "Invert TX on UART1"
+  default "n"
+  help
+    Whether to invert the TX signal on UART1.
+
+config LIGHT_UART_DRIVER_INV_RX2
+  depends on LIGHT_UART_DRIVER
+  bool "Invert RX on UART2"
+  default "n"
+  help
+    Whether the RX signal on UART2 is inverted.
+
+config LIGHT_UART_DRIVER_INV_TX2
+  depends on LIGHT_UART_DRIVER
+  bool "Invert TX on UART2"
+  default "n"
+  help
+    Whether to invert the TX signal on UART2.
+
 config NODE_DEBUG
   bool "Enable NODE_DBG() output"
   default "n"
