@@ -59,16 +59,16 @@ static uart_dev_t * DRAM_ATTR uarts[] = { &UART0, &UART1, &UART2 };
 
 static void IRAM_ATTR lightuart_isr (void *arg)
 {
+#define RX_RDY_TASK_POST_FAILED 0x4000000
+  static uint32_t errs_reported[3];
+
   struct lightuart *lu = arg;
 
-  int events = 0;
   // If we enter with data already on the rx queue, we assume we've already
   // posted about it. A bit dangerous, but much easier on the post queue.
-  bool should_post = xQueueIsQueueEmptyFromISR(lu->rx_q);
-
-  // If we flag an error below, also set rx_rdy if there's stuff in the queue.
-  if (!should_post)
-    events |= LIGHTUART_RX_RDY;
+  bool q_was_empty = xQueueIsQueueEmptyFromISR(lu->rx_q);
+  bool have_rx = false;
+  int events = 0;
 
   uart_dev_t *dev = uarts[lu->uart_no];
 
@@ -79,13 +79,11 @@ static void IRAM_ATTR lightuart_isr (void *arg)
     {
       events |= LIGHTUART_FRAME_ERR;
       dev->int_clr.frm_err = 1;
-      should_post = true;
     }
     if (ints & UART_RXFIFO_OVF_INT_ENA)
     {
       events |= LIGHTUART_HW_OVF;
       dev->int_clr.rxfifo_ovf = 1;
-      should_post = true;
     }
     if ((ints & UART_RXFIFO_TOUT_INT_ENA) ||
         (ints & UART_RXFIFO_FULL_INT_ENA))
@@ -93,12 +91,11 @@ static void IRAM_ATTR lightuart_isr (void *arg)
       uint32_t fifo_len = dev->status.rxfifo_cnt;
       for (uint32_t i = 0; i < fifo_len; ++i)
       {
-        events |= LIGHTUART_RX_RDY;
+        have_rx = true;
         char c = dev->fifo.rw_byte;
         if (!xQueueSendToBackFromISR(lu->rx_q, &c, NULL))
         {
           events |= LIGHTUART_SOFT_OVF;
-          should_post = true;
         }
       }
       dev->int_clr.val = UART_RXFIFO_TOUT_INT_ENA | UART_RXFIFO_FULL_INT_ENA;
@@ -121,9 +118,38 @@ static void IRAM_ATTR lightuart_isr (void *arg)
     ints = dev->int_st.val;
   }
 
-  // TODO: suppress floods of overflow events somehow
-  if (events && should_post)
-    task_post(lu->prio, lu->tsk, MK_LIGHTUART_TASK_PARAM(lu->uart_no, events));
+  bool lost_rx_rdy_before =
+    (errs_reported[lu->uart_no] & RX_RDY_TASK_POST_FAILED);
+  uint32_t new_errs = (events & (~errs_reported[lu->uart_no]));
+
+  // No new errors, no new rx => no need to post
+  if (!new_errs && !have_rx)
+    return;
+
+  // No new errors, have new rx, but already data in queue => no need to post
+  if (!new_errs && have_rx && !q_was_empty && !lost_rx_rdy_before)
+    return;
+
+  // Any new, unreported errors?
+  if (new_errs)
+    errs_reported[lu->uart_no] |= new_errs;
+  else if (!events && have_rx)
+  {
+    // No current errors, but successfully received => do report next error(s)
+    errs_reported[lu->uart_no] = 0;
+  }
+
+  if (have_rx)
+    events |= LIGHTUART_RX_RDY;
+
+  if (events && !task_post(
+    lu->prio, lu->tsk, MK_LIGHTUART_TASK_PARAM(lu->uart_no, events)))
+  {
+    // If we can't post an rx_rdy message, we need to retry next time, or
+    // we can end up stalling the receive altogether.
+    if (events & LIGHTUART_RX_RDY)
+      errs_reported[lu->uart_no] |= RX_RDY_TASK_POST_FAILED;
+  };
 }
 
 
