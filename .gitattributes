@@ -1,0 +1,4 @@
+# If checking out on Windows, do NOT mess with line endings in shell scripts,
+# or you end up with mysterious "not found" errors due to the ^M being
+# considered part of the name to exec.
+*.sh text eol=lf
