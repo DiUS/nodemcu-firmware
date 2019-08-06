@@ -99,6 +99,28 @@ static int wifi_restore (lua_State *L)
     0 : luaL_error (L, "failed to restore wifi, code %d", err);
 }
 
+static int wifi_set_ps (lua_State *L)
+{
+  int mode = luaL_checkinteger (L, 1);
+
+  esp_err_t err = esp_wifi_set_ps ((wifi_ps_type_t)mode);
+  return (err == ESP_OK) ?
+    0 : luaL_error (L, "failed to set wifi powersave, code %d", err);
+}
+
+static int wifi_get_ps (lua_State *L)
+{
+  wifi_ps_type_t mode;
+
+  esp_err_t err = esp_wifi_get_ps (&mode);
+  if (err == ESP_OK)
+  {
+    lua_pushinteger(L,(int)mode);
+    return 1;
+  }
+  return luaL_error (L, "failed to get wifi powersave, code %d", err);
+}
+
 
 // It's in the IDF, but without any obviously-accessible include file
 int pbkdf2_sha1(const char *passphrase, const char *ssid, size_t ssid_len, int iterations, uint8_t *buf, size_t buflen);
@@ -153,6 +175,8 @@ LROT_BEGIN(wifi)
   LROT_FUNCENTRY( stop,                       wifi_stop )
   LROT_FUNCENTRY( restore,                    wifi_restore )
   LROT_FUNCENTRY( derive_key,                 wifi_derive_key )
+  LROT_FUNCENTRY( set_ps,                     wifi_set_ps )
+  LROT_FUNCENTRY( get_ps,                     wifi_get_ps )
 
   LROT_TABENTRY ( sta,                        wifi_sta )
   LROT_TABENTRY ( ap,                         wifi_ap )
@@ -172,6 +196,11 @@ LROT_BEGIN(wifi)
   LROT_NUMENTRY ( STR_WIFI_SECOND_CHAN_NONE,  WIFI_SECOND_CHAN_NONE )
   LROT_NUMENTRY ( STR_WIFI_SECOND_CHAN_ABOVE, WIFI_SECOND_CHAN_ABOVE )
   LROT_NUMENTRY ( STR_WIFI_SECOND_CHAN_BELOW, WIFI_SECOND_CHAN_BELOW )
+
+  LROT_NUMENTRY ( PS_NONE, WIFI_PS_NONE )
+  LROT_NUMENTRY ( PS_MIN_MODEM, WIFI_PS_MIN_MODEM )
+  LROT_NUMENTRY ( PS_MAX_MODEM, WIFI_PS_MAX_MODEM )
+
 LROT_END(wifi, NULL, 0)
 
 NODEMCU_MODULE(WIFI, "wifi", wifi, wifi_init);
