@@ -190,6 +190,13 @@ config LUA_MODULE_OTAUPGRADE
       a partition table with at least two OTA partitions, plus the OTA data
       partition. See the IDF documentation for details.
 
+config LUA_MODULE_PLUG_LEDS
+  bool "Plug Leds module"
+  default "n"
+  help
+      Includes the plug_leds. This module provides access to the
+      leds on DiUS power monitor plugs.
+
 config LUA_MODULE_QRCODEGEN
   bool "QR Code Generator module"
   default "n"
@@ -222,7 +229,7 @@ config LUA_MODULE_SIGMA_DELTA
   help
       Includes the sigma_delta module. This module provides access to the
       sigma-delta hardware.
-	  
+
 config LUA_MODULE_SJSON
   bool "SJSON module"
   default "n"
