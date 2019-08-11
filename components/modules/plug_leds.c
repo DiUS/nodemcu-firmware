@@ -40,6 +40,7 @@ typedef struct {
   uint32_t pat;
   uint32_t rgba1;
   uint32_t rgba2;
+  uint8_t  count;
 } led_pattern_t;
 
 led_pattern_t leds[LED_COUNT][LEVEL_COUNT];
@@ -137,6 +138,17 @@ static void hw_access(void* pvParameters)
         pos=0x80000000U;
       if (initialised)
         show_leds(pos);
+      for (int l=0;l<LED_COUNT;l++)
+      {
+        for (int e=0;e<LEVEL_COUNT;e++)
+        {
+          if (leds[l][e].count)
+          {
+            if (--leds[l][e].count==0)
+              leds[l][e].rgba1=leds[l][e].rgba2=TRANSPARENT;
+          }
+        }
+      }
     }
   }
 }
@@ -207,7 +219,7 @@ static int led_transparent( lua_State *L )
   return TRANSPARENT;
 }
 
-static int led_set( lua_State* L )
+static int led_set_impl( lua_State* L, uint8_t count)
 {
   unsigned int l     = luaL_checkinteger( L, 1 );
   unsigned int level = luaL_checkinteger( L, 2 );
@@ -222,10 +234,23 @@ static int led_set( lua_State* L )
   leds[l][level].pat=pat;
   leds[l][level].rgba1=rgba1;
   leds[l][level].rgba2=rgba2;
+  leds[l][level].count=count;
+
   command_t cmd=LEDS_UPDATE;
   xQueueSendToBack( queue, &cmd, portMAX_DELAY );
   return 0;
 }
+
+static int led_set( lua_State* L )
+{
+  return led_set_impl(L,0);
+}
+
+static int led_flash( lua_State* L )
+{
+  return led_set_impl(L,2);
+}
+
 
 static int led_blank( lua_State* L )
 {
@@ -249,6 +274,7 @@ LROT_BEGIN(plug_leds)
   LROT_FUNCENTRY( transparent, led_transparent )
 
   LROT_FUNCENTRY( set,         led_set )
+  LROT_FUNCENTRY( flash,       led_flash )
   LROT_FUNCENTRY( blank,       led_blank )
 LROT_END(plug_leds, NULL, 0)
 
