@@ -261,7 +261,31 @@ static int led_blank( lua_State* L )
   return 0;
 }
 
+// plug_leds.iomux(pin[,signal[,invert]]). Only selects the output source; Something else needs to set the pin to output
+// Returns the previous source value and inversion. If signal is not given, only reads, does not write
+// This is an awful hack for the EOL mode!
+static int led_iomux( lua_State* L )
+{
+  unsigned int pin = luaL_checkinteger( L, 1 );
+  int sig   = luaL_optint(L, 2, -1);
+  unsigned int inv   = luaL_optint(L, 3, 0);
 
+  if (!GPIO_IS_VALID_GPIO(pin))
+    return luaL_error(L,"invalid GPIO index: %u\n",pin);
+  if (sig>256)
+    return luaL_error(L,"invalid signal index: %u\n",sig);
+  if (inv>1)
+    return luaL_error(L,"invalid invert-signal value (0 and 1 supported): %u\n",inv);
+
+  uint32_t reg=GPIO_FUNC0_OUT_SEL_CFG_REG+4*pin;
+  uint32_t previous=READ_PERI_REG(reg);
+
+  if (sig>=0)
+    WRITE_PERI_REG(reg,sig|(inv<<9));
+  lua_pushinteger(L,previous&0x1ff);
+  lua_pushinteger(L,(previous>>9)&0x1);
+  return 2;
+}
 
 // Module function map
 LROT_BEGIN(plug_leds)
@@ -276,6 +300,9 @@ LROT_BEGIN(plug_leds)
   LROT_FUNCENTRY( set,         led_set )
   LROT_FUNCENTRY( flash,       led_flash )
   LROT_FUNCENTRY( blank,       led_blank )
+
+  LROT_FUNCENTRY( iomux,       led_iomux )
+
 LROT_END(plug_leds, NULL, 0)
 
 NODEMCU_MODULE(PLUG_LEDS, "plug_leds", plug_leds, NULL);
