@@ -39,6 +39,8 @@
 #include <lwip/api.h>
 #include <esp_log.h>
 #include <string.h>
+#include <lwip/ip.h>
+#include <lwip/tcp.h>
 
 #define S4PP_TABLE_INSTANCE "s4pp.instance"
 
@@ -418,6 +420,8 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       if (!conn->netconn)
         goto err;
       netconn_set_nonblocking(conn->netconn, 1);
+      ip_set_option(conn->netconn->pcb.tcp, SOF_KEEPALIVE);
+
       state->timestamps[0]=esp_timer_get_time();
       netconn_connect(conn->netconn, &conn->resolved_ip, conn->port);
       break;
