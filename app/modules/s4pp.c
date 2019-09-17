@@ -854,6 +854,7 @@ static void handle_notify (s4pp_userdata *sud, char *ntfy)
   }
   if (code==NTFY_TIME && n_args+3<LUA_MINSTACK)
   {
+    c_printf("\nklptime\n"); // Tell the BLE module to capture its RTC. Then we can take our time for everything else (which, being in LUA, we will...)
     uint32_t now=system_get_time();
     lua_pushinteger(sud->L, system_time_diff(sud->connection_initiate_time,sud->connect_time));
     lua_pushinteger(sud->L, system_time_diff(sud->connect_time,sud->hello_time));
@@ -935,7 +936,10 @@ static bool handle_line (s4pp_userdata *sud, char *line, uint16_t len)
     }
   }
   else if (strncmp ("NTFY:", line, 5) == 0)
+  {
+    // c_printf("NTFY line: \"%s\"\n",line);
     handle_notify (sud, line + 5);
+  }
   else
     goto_err_with_msg (sud->L, "unexpected response: %s", line);
   return true;
@@ -1161,7 +1165,7 @@ static int s4pp_do_upload (lua_State *L)
   if (lua_isnumber (L, -1))
   {
     sud->johny_bug=lua_tonumber(L, -1);
-    c_printf("johny_bug is %d\n",sud->johny_bug);
+    // c_printf("johny_bug is %d\n",sud->johny_bug);
   }
   lua_pop (L, 1);
 
