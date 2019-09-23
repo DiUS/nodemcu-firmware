@@ -401,6 +401,25 @@ static int wifi_getchannel( lua_State* L )
   return 1;
 }
 
+static int wifi_make_mac( lua_State* L )
+{
+  unsigned int high = luaL_checkinteger( L, 1 );
+  unsigned int low = luaL_checkinteger( L, 2 );
+
+  if (high==0 && low==0)
+    return 0; // nil if we don't have a mac
+  char mac[20];
+  c_sprintf(mac,"%02x:%02x:%02x:%02x:%02x:%02x",
+            (uint8_t)(high>>8),
+            (uint8_t)(high>>0),
+            (uint8_t)(low>>24),
+            (uint8_t)(low>>16),
+            (uint8_t)(low>>8),
+            (uint8_t)(low>>0));
+  lua_pushstring( L, mac );
+  return 1;
+}
+
 // Lua: wifi.setphymode()
 static int wifi_setphymode( lua_State* L )
 {
@@ -1979,6 +1998,7 @@ static const LUA_REG_TYPE wifi_map[] =  {
 #endif
   { LSTRKEY( "sleeptype" ),      LFUNCVAL( wifi_station_sleeptype ) },
   { LSTRKEY( "channel" ),        LFUNCVAL( wifi_chan ) },
+  { LSTRKEY( "makemac" ),        LFUNCVAL( wifi_make_mac ) },
 
   { LSTRKEY( "sta" ),            LROVAL( wifi_station_map ) },
   { LSTRKEY( "ap" ),             LROVAL( wifi_ap_map ) },
