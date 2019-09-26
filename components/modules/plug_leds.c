@@ -29,7 +29,7 @@ typedef struct {
   };
 } led_connection_t;
 
-led_connection_t led[LED_COUNT];
+static led_connection_t led[LED_COUNT];
 
 #define RED_SHIFT    16
 #define GREEN_SHIFT   8
@@ -40,11 +40,12 @@ typedef struct {
   uint32_t pat;
   uint32_t rgba1;
   uint32_t rgba2;
-  uint8_t  count;
+  uint16_t  count;
 } led_pattern_t;
 
-led_pattern_t leds[LED_COUNT][LEVEL_COUNT];
-uint64_t blank_until=0;
+static led_pattern_t leds[LED_COUNT][LEVEL_COUNT];
+static uint64_t blank_until=0;
+static volatile uint8_t showingPos=0;
 
 #define LEDC_HS_TIMER          LEDC_TIMER_0
 #define LEDC_HS_MODE           LEDC_HIGH_SPEED_MODE
@@ -134,8 +135,12 @@ static void hw_access(void* pvParameters)
     {
       last_tick+=PATTERN_US;
       pos>>=1;
+      showingPos++;
       if (!pos)
+      {
         pos=0x80000000U;
+        showingPos=0;
+      }
       if (initialised)
         show_leds(pos);
       for (int l=0;l<LED_COUNT;l++)
@@ -216,10 +221,11 @@ static int led_rgb( lua_State *L )
 
 static int led_transparent( lua_State *L )
 {
-  return TRANSPARENT;
+  lua_pushinteger(L,TRANSPARENT);
+  return 1;
 }
 
-static int led_set_impl( lua_State* L, uint8_t count)
+static int led_set_impl( lua_State* L, uint16_t count)
 {
   unsigned int l     = luaL_checkinteger( L, 1 );
   unsigned int level = luaL_checkinteger( L, 2 );
@@ -231,6 +237,11 @@ static int led_set_impl( lua_State* L, uint8_t count)
     return luaL_error(L,"invalid LED index: %u\n",l);
   if (level>=LEVEL_COUNT)
     return luaL_error(L,"invalid LED level: %u\n",level);
+  if (count) // limited-time display, so adjust the pattern to start at current position
+  {
+    if (showingPos!=0)
+      pat=(pat>>showingPos)|(pat<<(32-showingPos));
+  }
   leds[l][level].pat=pat;
   leds[l][level].rgba1=rgba1;
   leds[l][level].rgba2=rgba2;
@@ -248,7 +259,8 @@ static int led_set( lua_State* L )
 
 static int led_flash( lua_State* L )
 {
-  return led_set_impl(L,2);
+  unsigned int count=luaL_optint(L, 6, 2);
+  return led_set_impl(L,count);
 }
 
 
