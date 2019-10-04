@@ -133,6 +133,7 @@ typedef struct
   uint32_t hello_time;
   uint16_t data_format;
   uint16_t johny_bug;
+  uint8_t  dns_shuffle_count;
 } s4pp_userdata;
 
 static uint16_t max_batch_size = 0; // "use the server setting"
@@ -1083,6 +1084,26 @@ static void on_reconnect (void *arg, int8_t err)
 }
 
 
+static bool rotate_dns_servers(uint8_t rotations_done)
+{
+  ip_addr_t dns0=dns_getserver(0);
+
+  int from;
+  for (from=1;from<DNS_MAX_SERVERS;from++)
+  {
+    ip_addr_t tmp=dns_getserver(from);
+    if (ip_addr_isany(&tmp))
+      break;
+    dns_setserver(from-1,&tmp);
+  }
+  // 'from' now holds how many DNS servers we have
+  if (from==1) // Only one server, no rotation done
+    return false;
+  dns_setserver(from-1,&dns0);
+
+  return rotations_done<from;
+}
+
 static void on_dns_found (const char *name, ip_addr_t *ip, void *arg)
 {
   (void)name;
@@ -1104,8 +1125,33 @@ static void on_dns_found (const char *name, ip_addr_t *ip, void *arg)
       lua_pushfstring (L, "connect failed: %d", res);
   }
   else
-    lua_pushliteral (L, "DNS failed: host not found");
+  {
+    ip_addr_t dns=dns_getserver(0);
+    c_printf("Failed to resolve %s using "IPSTR", %u rotations\n",name,&dns.addr,sud->dns_shuffle_count++);
 
+    bool try_again=rotate_dns_servers(sud->dns_shuffle_count++);
+    if (try_again)
+    {
+      int res = espconn_gethostbyname(arg,name,&sud->dns,on_dns_found);
+      switch (res)
+      {
+      case ESPCONN_OK: // already resolved, synthesize DNS callback. Yes, this is recursive...
+        lua_pop (L, 1);
+        on_dns_found (0, &sud->dns, &sud->conn);
+        return;
+      case ESPCONN_INPROGRESS:
+        lua_pop (L, 1);
+        return;
+      default:
+        lua_pushliteral (L, "DNS lookup error (retry)");
+        break;
+      }
+    }
+    else
+    {
+      lua_pushliteral (L, "DNS failed: host not found");
+    }
+  }
   lua_pushinteger (L, sud->n_committed);
   cleanup (sud);
   lua_call (L, 2, 0);
@@ -1266,18 +1312,17 @@ static int s4pp_do_upload (lua_State *L)
   lua_pop (L, 1);
   switch (res)
   {
-    case ESPCONN_OK: // already resolved!
-    case ESPCONN_INPROGRESS: break;
+    case ESPCONN_OK: // already resolved, synthesize DNS callback
+      on_dns_found (0, &sud->dns, &sud->conn);
+      break;
+    case ESPCONN_INPROGRESS:
+      break;
     default:
      xfree (sud->conn.proto.tcp);
      xfree (sud->base);
      xfree (sud);
      return luaL_error (L, "DNS lookup error: %d", res);
   }
-
-  if (res == ESPCONN_OK) // synthesize DNS callback
-    on_dns_found (0, &sud->dns, &sud->conn);
-
   return 0;
 
 err:
