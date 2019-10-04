@@ -43,6 +43,10 @@
 #include <lwip/tcp.h>
 
 #define S4PP_TABLE_INSTANCE "s4pp.instance"
+// Reserved for reporting simple DNS failures, in case we stop implementing iterative in here and punt it to LUA
+#define S4PP_DNS_FAILED                (256+1) // Lives in the same space as s4pp_error_t, so make sure we don't collide
+// For reporting DNS failures that persist even after rotating the DNS servers
+#define S4PP_DNS_FAILED_COMPLETELY     (256+2) // Lives in the same space as s4pp_error_t, so make sure we don't collide
 
 #define free_and_clear(p) do { free(p); p = NULL; } while (0)
 #define unref_and_clear(L, r) \
@@ -76,6 +80,7 @@ typedef struct s4pp_state
 
   int userdata_ref;
   unsigned pending_evts;
+  uint8_t dns_shuffle_count;
 
   int64_t timestamps[3];
 #if CONFIG_LUA_MODULE_FLASHFIFO
@@ -354,6 +359,26 @@ err:
 }
 
 
+static bool rotate_dns_servers(uint8_t rotations_done)
+{
+  ip_addr_t dns0=dns_getserver(0);
+
+  int from;
+  for (from=1;from<DNS_MAX_SERVERS;from++)
+  {
+    ip_addr_t tmp=dns_getserver(from);
+    if (ip_addr_isany_val(tmp))
+      break;
+    dns_setserver(from-1,&tmp);
+  }
+  // 'from' now holds how many DNS servers we have
+  if (from==1) // Only one server, no rotation done
+    return false;
+  dns_setserver(from-1,&dns0);
+
+  return rotations_done<from;
+}
+
 
 // --- bounced event handling ---------------------------------------
 
@@ -411,20 +436,44 @@ static void handle_conn(task_param_t param, task_prio_t prio)
     }
     case CONN_EVT_DNS:
       if (ip_addr_isany_val(nbe->addr))
-      {
-        report_error(lua_getstate(), state, s4pp_last_error(state->ctx));
-        goto err;
+      { // This DNS lookup failed. Let's see whether we should rotate DNS servers and try again
+        bool try_again=rotate_dns_servers(state->dns_shuffle_count++);
+        if (try_again)
+        {
+          err_t err = dns_gethostbyname(state->server.hostname, &conn->resolved_ip, dns_resolved, conn);
+          if (err == ERR_OK)
+          {
+            dns_resolved(state->server.hostname, &conn->resolved_ip, conn);
+          }
+          else if (err == ERR_INPROGRESS)
+          {
+          }
+          else
+          {
+            report_error(lua_getstate(), state, S4PP_NETWORK_ERROR);
+            goto err;
+          }
+        }
+        else
+        {
+          report_error(lua_getstate(), state, S4PP_DNS_FAILED_COMPLETELY);
+          goto err;
+        }
       }
-      conn->resolved_ip = nbe->addr;
-      conn->netconn = netconn_new_with_callback(NETCONN_TCP, on_netconn_evt);
-      if (!conn->netconn)
-        goto err;
-      netconn_set_nonblocking(conn->netconn, 1);
-      ip_set_option(conn->netconn->pcb.tcp, SOF_KEEPALIVE);
+      else
+      {
+        conn->resolved_ip = nbe->addr;
+        conn->netconn = netconn_new_with_callback(NETCONN_TCP, on_netconn_evt);
+        if (!conn->netconn)
+          goto err;
+        netconn_set_nonblocking(conn->netconn, 1);
+        ip_set_option(conn->netconn->pcb.tcp, SOF_KEEPALIVE);
 
-      state->timestamps[0]=esp_timer_get_time();
-      netconn_connect(conn->netconn, &conn->resolved_ip, conn->port);
+        state->timestamps[0]=esp_timer_get_time();
+        netconn_connect(conn->netconn, &conn->resolved_ip, conn->port);
+      }
       break;
+
     default: break;
   }
   goto done;
