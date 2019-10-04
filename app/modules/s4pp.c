@@ -1047,10 +1047,17 @@ static void on_disconnect (void *arg)
 {
   s4pp_userdata *sud = ((struct espconn *)arg)->reverse;
   lua_State *L = push_callback (sud);
+  int nargs=2;
+
   if (sud->state == S4PP_DONE)
   {
     lua_pushnil (L);
     lua_pushinteger (L, sud->n_committed);
+
+    char temp[20];;
+    c_sprintf(temp, IPSTR, IP2STR( &sud->dns.addr ) );
+    lua_pushstring( L, temp );
+    nargs=3;
   }
   else
   {
@@ -1061,7 +1068,7 @@ static void on_disconnect (void *arg)
     lua_pushinteger (L, sud->n_committed);
   }
   cleanup (sud);
-  lua_call (L, 2, 0);
+  lua_call (L, nargs, 0);
 }
 
 
@@ -1084,6 +1091,8 @@ static void on_dns_found (const char *name, ip_addr_t *ip, void *arg)
   if (ip)
   {
     os_memcpy (&sud->conn.proto.tcp->remote_ip, ip, 4);
+    if (ip!=&sud->dns)
+      os_memcpy (&sud->dns, ip, 4);
     int res = sud->funcs->connect (&sud->conn);
     if (res == 0)
     {
