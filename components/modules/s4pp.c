@@ -137,8 +137,8 @@ static task_handle_t conn_task;
 static bool conn_is_active(s4pp_conn_t *conn);
 static void free_connection(s4pp_conn_t *conn);
 static s4pp_userdata_t *userdata_from_state(lua_State *L, s4pp_state_t *state);
-static void report_error(lua_State *L, s4pp_state_t *state, int errcode);
-
+static void report_error_real(lua_State *L, s4pp_state_t *state, int errcode, int line);
+#define report_error(L,state,code) report_error_real(L,state,code,__LINE__)
 
 // --- active_s4pps -------------------------------------------------
 
@@ -512,7 +512,7 @@ static bool io_send(s4pp_conn_t *conn, const char *data, uint16_t len)
 
 // --- Lua / s4pp glue -----------------------------------------------
 
-static void report_error(lua_State *L, s4pp_state_t *state, int errcode)
+static void report_error_real(lua_State *L, s4pp_state_t *state, int errcode, int line)
 {
   int top = lua_gettop(L);
   s4pp_userdata_t *sud = userdata_from_state(L, state);
@@ -520,7 +520,8 @@ static void report_error(lua_State *L, s4pp_state_t *state, int errcode)
   {
     lua_rawgeti(L, LUA_REGISTRYINDEX, sud->error_ref);
     lua_pushinteger(L, errcode);
-    lua_call(L, 1, 0);
+    lua_pushinteger(L, line);
+    lua_call(L, 2, 0);
   }
   lua_settop(L, top);
 }
