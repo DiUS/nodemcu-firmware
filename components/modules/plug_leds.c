@@ -5,7 +5,7 @@
 #include "platform.h"
 #include "driver/ledc.h"
 #include "esp_log.h"
-
+#include <freertos/semphr.h>
 
 
 #define LEVEL_COUNT 4
@@ -13,6 +13,7 @@
 
 static xTaskHandle   hwAccess = NULL;
 static QueueHandle_t queue;
+static SemaphoreHandle_t init_done;
 typedef enum {
   LEDS_INIT,
   LEDS_UPDATE,
@@ -125,7 +126,12 @@ static void hw_access(void* pvParameters)
       {
         switch(cmd)
         {
-        case LEDS_INIT:   init_leds(); initialised=true; update_leds(pos); break;
+        case LEDS_INIT:
+          init_leds();
+          initialised=true;
+          update_leds(pos);
+          xSemaphoreGive(init_done);
+          break;
         case LEDS_UPDATE: if (initialised) update_leds(pos); break;
         default: break;
         }
@@ -181,10 +187,13 @@ static int led_init( lua_State *L )
   if (!hwAccess)
   {
     queue = xQueueCreate(10, sizeof(command_t));
+    init_done = xSemaphoreCreateBinary();
     xTaskCreate(hw_access, "plug_leds", 4096, NULL, ESP_TASK_MAIN_PRIO + 2, &hwAccess);
   }
   command_t cmd=LEDS_INIT;
   xQueueSendToBack( queue, &cmd, portMAX_DELAY );
+  if (xSemaphoreTake(init_done, 2*configTICK_RATE_HZ) != pdTRUE)
+    return luaL_error(L, "timed out waiting for led init");
 
   return 0;
 }
