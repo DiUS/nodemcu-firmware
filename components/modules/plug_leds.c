@@ -234,9 +234,9 @@ static int led_set_impl( lua_State* L, uint16_t count)
   unsigned int rgba2 = luaL_optint(L, 5, TRANSPARENT);
 
   if (l>=LED_COUNT)
-    return luaL_error(L,"invalid LED index: %u\n",l);
+    return luaL_error(L,"invalid LED index: %d\n",l);
   if (level>=LEVEL_COUNT)
-    return luaL_error(L,"invalid LED level: %u\n",level);
+    return luaL_error(L,"invalid LED level: %d\n",level);
   if (count) // limited-time display, so adjust the pattern to start at current position
   {
     if (showingPos!=0)
@@ -283,11 +283,11 @@ static int led_iomux( lua_State* L )
   unsigned int inv   = luaL_optint(L, 3, 0);
 
   if (!GPIO_IS_VALID_GPIO(pin))
-    return luaL_error(L,"invalid GPIO index: %u\n",pin);
+    return luaL_error(L,"invalid GPIO index: %d\n",pin);
   if (sig>256)
-    return luaL_error(L,"invalid signal index: %u\n",sig);
+    return luaL_error(L,"invalid signal index: %d\n",sig);
   if (inv>1)
-    return luaL_error(L,"invalid invert-signal value (0 and 1 supported): %u\n",inv);
+    return luaL_error(L,"invalid invert-signal value (0 and 1 supported): %d\n",inv);
 
   uint32_t reg=GPIO_FUNC0_OUT_SEL_CFG_REG+4*pin;
   uint32_t previous=READ_PERI_REG(reg);
