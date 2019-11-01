@@ -79,11 +79,27 @@ static int romcfg_write(lua_State *L)
   return 0;
 }
 
+static uint32_t map_integer_to_storage(uint32_t x)
+{
+  if (x==0x80000000)
+    return 0x80000001; // Ever-so-slightly smaller negative number
+  if (x==0xffffffff)
+    return 0x80000000;
+  return x;
+}
+
+static uint32_t map_storage_to_integer(uint32_t x)
+{
+  if (x==0x80000000)
+    return 0xffffffff;
+  return x;
+}
+
 // romcfg.write_integer(i ,offset)
 static int romcfg_write_integer(lua_State *L)
 {
   int32_t sdata = luaL_checkinteger(L, 1);
-  uint32_t data=(uint32_t)sdata;
+  uint32_t data=map_integer_to_storage((uint32_t)sdata);
 
   size_t offset = luaL_checkinteger(L, 2);
   size_t data_len=4;
@@ -137,7 +153,7 @@ static int romcfg_read_integer(lua_State *L)
   esp_err_t err = esp_partition_read(part,offset,&current_data,data_len);
   if (err!=ESP_OK)
     return luaL_error(L, "error reading romcfg");
-  lua_pushinteger(L, current_data);
+  lua_pushinteger(L, (int32_t)map_storage_to_integer(current_data));
   return 1;
 }
 
