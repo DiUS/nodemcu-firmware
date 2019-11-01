@@ -79,6 +79,68 @@ static int romcfg_write(lua_State *L)
   return 0;
 }
 
+// romcfg.write_integer(i ,offset)
+static int romcfg_write_integer(lua_State *L)
+{
+  int32_t sdata = luaL_checkinteger(L, 1);
+  uint32_t data=(uint32_t)sdata;
+
+  size_t offset = luaL_checkinteger(L, 2);
+  size_t data_len=4;
+
+  if (data_len+offset>SPI_FLASH_SEC_SIZE)
+    return luaL_error(L, "romcfg write beyond partition end");
+  if ((offset&3) || (data_len&3))
+    return luaL_error(L, "romcfg write start/size must be 32 bit aligned");
+
+  const esp_partition_t *part = find_partition();
+  if (!part)
+    return luaL_error(L, "no romcfg partition");
+
+  uint32_t current_data;
+  esp_err_t err = esp_partition_read(part,offset,&current_data,data_len);
+  if (err!=ESP_OK)
+    return luaL_error(L, "error reading romcfg");
+  if (current_data==data)
+  {
+    lua_pushboolean( L, true );
+    return 1;
+  }
+  if ((current_data&data)!=data)
+  {
+    lua_pushboolean( L, false );
+    return 1;
+  }
+  err = esp_partition_write(part,offset,&data,data_len);
+  if (err!=ESP_OK)
+    return luaL_error(L, "error writing romcfg");
+  lua_pushboolean( L, true );
+  return 1;
+}
+
+// romcfg.read_integer(offset)
+static int romcfg_read_integer(lua_State *L)
+{
+  size_t offset = luaL_checkinteger(L, 1);
+  size_t data_len=4;
+
+  if (data_len+offset>SPI_FLASH_SEC_SIZE)
+    return luaL_error(L, "romcfg read beyond partition end");
+  if ((offset&3) || (data_len&3))
+    return luaL_error(L, "romcfg read start/size must be 32 bit aligned");
+
+  const esp_partition_t *part = find_partition();
+  if (!part)
+    return luaL_error(L, "no romcfg partition");
+
+  uint32_t current_data;
+  esp_err_t err = esp_partition_read(part,offset,&current_data,data_len);
+  if (err!=ESP_OK)
+    return luaL_error(L, "error reading romcfg");
+  lua_pushinteger(L, current_data);
+  return 1;
+}
+
 
 // romcfg.get([offset [,len]])
 static int romcfg_get_generic(lua_State *L, bool raw)
@@ -159,6 +221,8 @@ LROT_BEGIN(romcfg)
   LROT_FUNCENTRY( get_raw, romcfg_get_raw )
   LROT_FUNCENTRY( erase,   romcfg_erase )
   LROT_FUNCENTRY( write,   romcfg_write )
+  LROT_FUNCENTRY( write_integer,   romcfg_write_integer )
+  LROT_FUNCENTRY( read_integer,   romcfg_read_integer )
   LROT_FUNCENTRY( is_empty,romcfg_is_empty )
 LROT_END(s4pp, NULL, 0)
 
