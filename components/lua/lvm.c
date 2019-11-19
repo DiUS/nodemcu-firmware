@@ -360,6 +360,9 @@ void luaV_concat (lua_State *L, int total, int last) {
       }
       G(L)->buff.n = tl;
       buffer = luaZ_openspace(L, &G(L)->buff, tl);
+      // Because the stack is not nearly as fixed as the "fixedstack()" call would suggest, it may have been
+      // moved in response to that memory allocation. So let's update our "top" pointer
+      top = L->base + last + 1;
       tl = 0;
       for (i=n; i>0; i--) {  /* concat all strings */
         size_t l = tsvalue(top-i)->len;
