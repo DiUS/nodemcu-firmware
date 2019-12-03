@@ -918,7 +918,7 @@ static bool handle_line (s4pp_userdata *sud, char *line, uint16_t len)
       report_progress(sud);
 #ifdef LUA_USE_MODULES_FLASHFIFO
     if (sud->base) {
-      flash_fifo_drop_samples (sud->n_used);
+      flash_fifo_drop_samples (sud->fifo_pos);
       sud->fifo_pos = 0;
     }
 #endif
