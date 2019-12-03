@@ -460,6 +460,7 @@ static void handle_conn(task_param_t param, task_prio_t prio)
           goto network_err;
         netconn_set_nonblocking(conn->netconn, 1);
         ip_set_option(conn->netconn->pcb.tcp, SOF_KEEPALIVE);
+        tcp_nagle_disable(conn->netconn->pcb.tcp);
 
         state->timestamps[0]=esp_timer_get_time();
         netconn_connect(conn->netconn, &conn->resolved_ip, conn->port);
