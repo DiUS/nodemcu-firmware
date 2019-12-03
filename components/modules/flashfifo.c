@@ -783,37 +783,48 @@ int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs)
   }
   else if (conv.s[3] == 'I')
     return -1; // nope, stray I, do not want
+  else if (strncmp(conv.s,"BLCK",4)==0)
+  {
+    sample->val.reservation = s.value;
+    sample->type = S4PP_RESERVATION;
+    sample->timestamp = s.timestamp;
+    sample->span = 0;
+    sample->divisor = 1;
+    sample->name = NULL;
+  }
   else // simple value
   {
     sample->val.formatted = itoa(s.value, valbuf, 10);
     sample->type = S4PP_FORMATTED;
   }
 
-  sample->timestamp = s.timestamp;
-  sample->span =
-    (s.decimals>>DURATION_SHIFT)&((1<<(DICTIONARY_SHIFT-DURATION_SHIFT))-1);
+  if (sample->type != S4PP_RESERVATION)
+  {
+    sample->timestamp = s.timestamp;
+    sample->span =
+      (s.decimals>>DURATION_SHIFT)&((1<<(DICTIONARY_SHIFT-DURATION_SHIFT))-1);
 
-  unsigned decis = s.decimals&((1<<DURATION_SHIFT)-1);
-  sample->divisor = 1;
-  while (decis--)
-    sample->divisor *= 10;
+    unsigned decis = s.decimals&((1<<DURATION_SHIFT)-1);
+    sample->divisor = 1;
+    while (decis--)
+      sample->divisor *= 10;
 
-  static char namebuf[50];
-  char *p = namebuf;
-  const char *mac =
-    flash_fifo_get_dictionary_by_index(s.decimals>>DICTIONARY_SHIFT);
-  while (*mac)
-    *p++ = *mac++;
-  *p++ = '-';
-  *p++ = 'p';
-  *p++ = '-';
-  *p++ = conv.s[0];
-  *p++ = conv.s[1];
-  *p++ = conv.s[2];
-  *p++ = conv.s[3];
+    static char namebuf[50];
+    char *p = namebuf;
+    const char *mac =
+      flash_fifo_get_dictionary_by_index(s.decimals>>DICTIONARY_SHIFT);
+    while (*mac)
+      *p++ = *mac++;
+    *p++ = '-';
+    *p++ = 'p';
+    *p++ = '-';
+    *p++ = conv.s[0];
+    *p++ = conv.s[1];
+    *p++ = conv.s[2];
+    *p++ = conv.s[3];
 
-  sample->name = namebuf;
-
+    sample->name = namebuf;
+  }
   return n + 1;
 }
 #endif
