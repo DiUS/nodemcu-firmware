@@ -626,6 +626,13 @@ failed:
   return false;
 }
 
+static bool cannot_fit_entries(s4pp_userdata *sud, int n)
+{
+  n--;
+  return sud->n_used+n >= sud->n_max ||
+    (max_batch_size>0 && sud->n_used+n>=max_batch_size);
+}
+
 static void progress_work (s4pp_userdata *sud)
 {
   lua_State *L = sud->L;
@@ -662,8 +669,7 @@ static void progress_work (s4pp_userdata *sud)
           if (!lua_checkstack (L, 1))
             goto_err_with_msg (L, "out of stack");
 
-          if ((sud->n_used >= sud->n_max) ||
-              (max_batch_size > 0) && (sud->n_used >= max_batch_size))
+          if (cannot_fit_entries(sud,1))
             sig = true;
           else
           {
@@ -716,35 +722,46 @@ static void progress_work (s4pp_userdata *sud)
                 const sample_t* firstPart=NULL;
                 static sample_t lastSample;
 
-                if (sud->data_format==1)
+                if (suffix=='K' &&
+                    tag_char_at_pos(tag,0)=='B' &&
+                    tag_char_at_pos(tag,1)=='L' &&
+                    tag_char_at_pos(tag,2)=='C')
                 {
-                  if (suffix=='I')
-                  {
-                    if (tag_change_char_at_pos(tag,3,'R')==lastSample.tag &&
-                        sample.timestamp==lastSample.timestamp &&
-                        sample.decimals==lastSample.decimals)
-                    {
-                      firstPart=&lastSample;
-                      tag=tag_change_char_at_pos(tag,3,'\0');
-                    }
-                    else
-                      skip=true;
-                  }
-                  else if (suffix=='R')
-                  {
-                    lastSample=sample;
-                    skip=true;
-                  }
+                  if (cannot_fit_entries(sud,sample.value))
+                    sig=true;
                 }
-                if (!skip)
+                else
                 {
-                  int idx=get_dict_index(sud,tag);
-                  if (idx<0)
-                    goto_err_with_msg (L, "dictionary overflowed");
-                  add_data(sud,idx,firstPart,&sample);
+                  if (sud->data_format==1)
+                  {
+                    if (suffix=='I')
+                    {
+                      if (tag_change_char_at_pos(tag,3,'R')==lastSample.tag &&
+                          sample.timestamp==lastSample.timestamp &&
+                          sample.decimals==lastSample.decimals)
+                      {
+                        firstPart=&lastSample;
+                        tag=tag_change_char_at_pos(tag,3,'\0');
+                      }
+                      else
+                        skip=true;
+                    }
+                    else if (suffix=='R')
+                    {
+                      lastSample=sample;
+                      skip=true;
+                    }
+                  }
+                  if (!skip)
+                  {
+                    int idx=get_dict_index(sud,tag);
+                    if (idx<0)
+                      goto_err_with_msg (L, "dictionary overflowed");
+                    add_data(sud,idx,firstPart,&sample);
+                    sud->n_used++;
+                  }
                 }
                 sud->fifo_pos++;
-                sud->n_used++;
               }
               else
               {
