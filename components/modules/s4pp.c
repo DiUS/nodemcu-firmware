@@ -967,7 +967,7 @@ static int ls4pp_create(lua_State *L)
     .connect = io_connect,
     .disconnect = io_disconnect,
     .send = io_send,
-    .max_payload = 1400
+    .max_payload = CONFIG_TCP_MSS
   };
 
   state->ctx = s4pp_create_glued(
