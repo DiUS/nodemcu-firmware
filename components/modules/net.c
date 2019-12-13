@@ -680,6 +680,16 @@ static int net_send( lua_State *L ) {
   return lwip_lua_checkerr(L, err);
 }
 
+static int net_fix( lua_State *L ) {
+  lnet_userdata *ud = net_get_udata(L);
+  if (!ud || ud->type != TYPE_UDP_SOCKET || !ud->netconn)
+    return luaL_error(L, "invalid user data");
+  lua_pushinteger(L, ud->netconn->last_err);
+  ud->netconn->last_err=0;
+  return 1;
+}
+
+
 // Lua: client:hold()
 static int net_hold( lua_State *L ) {
   lnet_userdata *ud = net_get_udata(L);
@@ -1195,6 +1205,7 @@ LROT_END(net_tcpsocket, NULL, 0)
 LROT_BEGIN(net_udpsocket)
   LROT_FUNCENTRY( listen,  net_listen )
   LROT_FUNCENTRY( close,   net_close )
+  LROT_FUNCENTRY( fix,     net_fix )
   LROT_FUNCENTRY( on,      net_on )
   LROT_FUNCENTRY( send,    net_send )
   LROT_FUNCENTRY( dns,     net_dns )
