@@ -30,7 +30,7 @@ typedef enum {
 
 #include <stdio.h>
 
-#define PAYLOAD_LIMIT 1400
+#define PAYLOAD_LIMIT 1220
 #define MAX_IN_FLIGHT 5
 
 #define AES_128_BLOCK_SIZE 16
