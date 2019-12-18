@@ -80,12 +80,12 @@ static int math_atan (lua_State *L) {
   lua_pushnumber(L, atan(luaL_checknumber(L, 1)));
   return 1;
 }
+#endif
 
 static int math_atan2 (lua_State *L) {
   lua_pushnumber(L, atan2(luaL_checknumber(L, 1), luaL_checknumber(L, 2)));
   return 1;
 }
-#endif
 
 static int math_ceil (lua_State *L) {
   lua_pushnumber(L, ceil(luaL_checknumber(L, 1)));
@@ -325,7 +325,7 @@ LROT_PUBLIC_BEGIN(math)
   LROT_FUNCENTRY( abs, math_abs )
 // LROT_FUNCENTRY( acos, math_acos )
 // LROT_FUNCENTRY( asin, math_asin )
-// LROT_FUNCENTRY( atan2, math_atan2 )
+  LROT_FUNCENTRY( atan2, math_atan2 )
 // LROT_FUNCENTRY( atan, math_atan )
   LROT_FUNCENTRY( ceil, math_ceil )
 // LROT_FUNCENTRY( cosh, math_cosh )
