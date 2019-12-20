@@ -371,6 +371,14 @@ static int node_uptime(lua_State *L)
   return 2;
 }
 
+static int node_cpuload(lua_State *L)
+{
+  char answer[1024];
+  vTaskGetRunTimeStats(answer);
+  lua_pushstring(L, answer);
+  return 1;
+}
+
 
 LROT_BEGIN(node_egc)
   LROT_FUNCENTRY( setmode,           node_egc_setmode )
@@ -404,6 +412,8 @@ LROT_BEGIN(node)
   LROT_FUNCENTRY( stripdebug, node_stripdebug )
   LROT_TABENTRY ( task,       node_task )
   LROT_FUNCENTRY( uptime,     node_uptime )
+  LROT_FUNCENTRY( cpuload,    node_cpuload )
+
 LROT_END(node, NULL, 0)
 
 
