@@ -43,6 +43,9 @@ BASIC_TYPES=-Du32_t=uint32_t -Du16_t=uint16_t -Du8_t=uint8_t -Ds32_t=int32_t -Ds
 # is not enabled.
 CXXFLAGS+=-DCONFIG_NVS_ENCRYPTION=1
 
+# Use simplified panic handlers, to prevent a lockup that can happen with the IDF provided ones
+EXTRA_LDFLAGS= -Wl,--wrap=xt_unhandled_exception -Wl,--wrap=panicHandler
+
 include $(IDF_PATH)/make/project.mk
 
 # Ensure these overrides are always used
