@@ -664,6 +664,8 @@ static bool on_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
     sample->type = S4PP_FORMATTED;
   }
 
+  sample->divisor=1;
+
   // printf("||| %lu %u %s %s\n", sample->timestamp, sample->span, sample->name, sample->val.formatted);
 
   lua_settop(L, top);
