@@ -1,10 +1,10 @@
 .PHONY: build
-build: $(addsuffix .bin,$(addprefix bin/nodemcu-boot-, 9600 74880 115200 silent nobaudchange))
+build: $(addsuffix .bin,$(addprefix bin/nodemcu-boot-, 9600 74880 115200 1000000 silent nobaudchange))
 
 CC=xtensa-lx106-elf-cc
 MKESPIMAGE?=./mkespimage.py
 
-CFLAGS=-std=c99 -Os -Wall -Wextra -mtext-section-literals -fomit-frame-pointer -mlongcalls
+CFLAGS=-std=c99 -Os -Wall -Wextra -mtext-section-literals -fdata-sections -fomit-frame-pointer -mlongcalls
 
 LDFLAGS=-nostdlib -T ld/nodemcu-boot.ld -Wl,-EL -static -Wl,-Map=$@.map -Wl,--cref
 
