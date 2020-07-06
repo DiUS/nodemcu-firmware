@@ -26,6 +26,7 @@ typedef enum {
   NTFY_TIME=0,
   NTFY_FIRMWARE=1,
   NTFY_FLAGS=2,
+  NTFY_JSON_FACTORS=101,
 } ntfy_val_t;
 
 #include <stdio.h>
@@ -863,7 +864,10 @@ static void handle_notify (s4pp_userdata *sud, char *ntfy)
   while (nxtarg && (n_args + 1) < LUA_MINSTACK)
   {
     char *arg = nxtarg;
-    nxtarg = strchr (arg, ',');
+    if (code!=NTFY_JSON_FACTORS) // Don't split up the JSON string on commas...
+      nxtarg = strchr (arg, ',');
+    else
+      nxtarg = NULL;
     if (nxtarg)
       *nxtarg++ = 0;
 
@@ -1389,6 +1393,7 @@ static const LUA_REG_TYPE s4pp_map[] =
   { LSTRKEY("NTFY_TIME"),     LNUMVAL(NTFY_TIME) },
   { LSTRKEY("NTFY_FIRMWARE"), LNUMVAL(NTFY_FIRMWARE) },
   { LSTRKEY("NTFY_FLAGS"),    LNUMVAL(NTFY_FLAGS) },
+  { LSTRKEY("NTFY_JSON_FACTORS"),LNUMVAL(NTFY_JSON_FACTORS) },
   XMEM_LUA_TABLE_ENTRY
   { LNILKEY, LNILVAL }
 };
