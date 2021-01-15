@@ -35,7 +35,8 @@ static led_connection_t led[LED_COUNT];
 #define RED_SHIFT    16
 #define GREEN_SHIFT   8
 #define BLUE_SHIFT    0
-#define TRANSPARENT  (1<<24)
+#define TRANSPARENT_SHIFT 24
+#define TRANSPARENT  (1<<TRANSPARENT_SHIFT)
 
 typedef struct {
   uint32_t pat;
@@ -234,6 +235,32 @@ static int led_transparent( lua_State *L )
   return 1;
 }
 
+static int led_get( lua_State* L, uint16_t count)
+{
+  unsigned int l     = luaL_checkinteger( L, 1 );
+  unsigned int level = luaL_checkinteger( L, 2 );
+
+  if (l>=LED_COUNT)
+    return luaL_error(L,"invalid LED index: %d\n",l);
+  if (level>=LEVEL_COUNT)
+    return luaL_error(L,"invalid LED level: %d\n",level);
+
+  uint32_t rgba1=leds[l][level].rgba1;
+  uint32_t rgba2=leds[l][level].rgba2;
+
+  lua_pushinteger(L,leds[l][level].pat);
+  lua_pushinteger(L,(rgba1>>RED_SHIFT)&0xff);
+  lua_pushinteger(L,(rgba1>>GREEN_SHIFT)&0xff);
+  lua_pushinteger(L,(rgba1>>BLUE_SHIFT)&0xff);
+  lua_pushinteger(L,(rgba1>>TRANSPARENT_SHIFT)&0x01);
+  lua_pushinteger(L,(rgba2>>RED_SHIFT)&0xff);
+  lua_pushinteger(L,(rgba2>>GREEN_SHIFT)&0xff);
+  lua_pushinteger(L,(rgba2>>BLUE_SHIFT)&0xff);
+  lua_pushinteger(L,(rgba2>>TRANSPARENT_SHIFT)&0x01);
+  return 9;
+}
+
+
 static int led_set_impl( lua_State* L, uint16_t count)
 {
   unsigned int l     = luaL_checkinteger( L, 1 );
@@ -319,6 +346,7 @@ LROT_BEGIN(plug_leds)
   LROT_FUNCENTRY( transparent, led_transparent )
 
   LROT_FUNCENTRY( set,         led_set )
+  LROT_FUNCENTRY( get,         led_get )
   LROT_FUNCENTRY( flash,       led_flash )
   LROT_FUNCENTRY( blank,       led_blank )
 
