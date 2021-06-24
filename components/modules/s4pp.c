@@ -381,11 +381,14 @@ static bool rotate_dns_servers(uint8_t rotations_done)
 
 
 // --- bounced event handling ---------------------------------------
-
 static void handle_conn(task_param_t param, task_prio_t prio)
 {
   (void)prio;
   netconn_bounce_event_t *nbe = (netconn_bounce_event_t *)param;
+
+  int goto_line=0;
+#define goto_network_err do { goto_line=__LINE__; goto network_err;} while (0)
+
 
   s4pp_conn_t *conn =
     (nbe->evt == CONN_EVT_DNS) ? nbe->conn : conn_by_netconn(nbe->netconn);
@@ -394,7 +397,7 @@ static void handle_conn(task_param_t param, task_prio_t prio)
 
   s4pp_state_t *state = state_by_conn(conn);
   if (nbe->evt == CONN_EVT_ERR)
-    goto network_err;
+    goto_network_err;
 
   if (!state || !state->ctx)
     goto err;
@@ -406,7 +409,7 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       {
         ESP_LOGE("s4pp", "excessive netconn send events, %d vs %d",
           nbe->len, conn->left_to_send);
-        goto network_err;
+        goto_network_err;
       }
       conn->left_to_send -= nbe->len;
       if (nbe->len && conn->left_to_send == 0)
@@ -422,7 +425,7 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       struct netbuf *nb = NULL;
       err_t res = netconn_recv(conn->netconn, &nb);
       if (res != ERR_OK || !nb)
-        goto network_err;
+        goto_network_err;
       netbuf_first(nb);
       do {
         void *payload;
@@ -444,7 +447,7 @@ static void handle_conn(task_param_t param, task_prio_t prio)
           if (err == ERR_OK)
             dns_resolved(state->server.hostname, &conn->resolved_ip, conn);
           else if (err != ERR_INPROGRESS)
-            goto network_err;
+            goto_network_err;
         }
         else
         {
@@ -457,7 +460,7 @@ static void handle_conn(task_param_t param, task_prio_t prio)
         conn->resolved_ip = nbe->addr;
         conn->netconn = netconn_new_with_callback(NETCONN_TCP, on_netconn_evt);
         if (!conn->netconn)
-          goto network_err;
+          goto_network_err;
         netconn_set_nonblocking(conn->netconn, 1);
         ip_set_option(conn->netconn->pcb.tcp, SOF_KEEPALIVE);
         tcp_nagle_disable(conn->netconn->pcb.tcp);
@@ -471,7 +474,8 @@ static void handle_conn(task_param_t param, task_prio_t prio)
   }
   goto done;
 network_err:
-  report_error(lua_getstate(), state, S4PP_NETWORK_ERROR);
+  report_error_real(lua_getstate(), state, S4PP_NETWORK_ERROR,goto_line);
+  goto_line=0;
 err:
   free_connection(conn);
 done:
