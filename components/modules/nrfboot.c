@@ -115,7 +115,7 @@ static bool handleByte(lua_State *L, uint8_t c)
     }
 
     pageno = c;
-    if (pageno == BP_NOPAGE && exp_page == (fw_len/BP_PAGESIZE + 1)) // remote reports done
+    if (pageno == BP_NOPAGE && exp_page == ((fw_len-1)/BP_PAGESIZE + 1)) // remote reports done
     {
       send_done = true;
       state = SYNCING; // We are done!
