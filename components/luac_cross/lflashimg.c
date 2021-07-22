@@ -179,15 +179,15 @@ static void addTS(lua_State *L, TString *ts) {
  * Enumerate all of the Protos in the Proto hiearchy and scan contents to collect
  * all referenced strings in a Lua Array at ToS.
  */
-static void scanProtoStrings(lua_State *L, const Proto* f) {
+static void scanProtoStrings(lua_State *L, const Proto* f, int strip) {
   /* Table at L->Top[-1] is used to collect the strings */
   int i;
 
-  if (f->source)
+  if (f->source && strip<4)
     addTS(L, f->source);
 
 #ifdef LUA_OPTIMIZE_DEBUG
-  if (f->packedlineinfo)
+  if (f->packedlineinfo && !strip)
     addTS(L, luaS_new(L, cast(const char *, f->packedlineinfo)));
 #endif
 
@@ -195,9 +195,12 @@ static void scanProtoStrings(lua_State *L, const Proto* f) {
     if (ttisstring(f->k + i))
       addTS(L, rawtsvalue(f->k + i));
   }
-  for (i = 0; i < f->sizeupvalues; i++) addTS(L, f->upvalues[i]);
-  for (i = 0; i < f->sizelocvars; i++)  addTS(L, f->locvars[i].varname);
-  for (i = 0; i < f->sizep; i++)        scanProtoStrings(L, f->p[i]);
+  if (!strip)
+  {
+    for (i = 0; i < f->sizeupvalues; i++) addTS(L, f->upvalues[i]);
+    for (i = 0; i < f->sizelocvars; i++)  addTS(L, f->locvars[i].varname);
+  }
+  for (i = 0; i < f->sizep; i++)        scanProtoStrings(L, f->p[i], strip);
 }
 
 
@@ -218,7 +221,10 @@ static void createROstrt(lua_State *L, FlashHeader *fh) {
     DBG_PRINT("Found: %s\n",getstr(rawtsvalue(L->top-2)));
     lua_pop(L, 1);                           // dump the value
   }
-  fh->nROsize = 2<<luaO_log2(fh->nROuse);
+  // Ensure at least 30% overprovisioning, to reduce pathological chaining if nROuse is just under a power of 2
+  fh->nROsize = 2<<luaO_log2((int)((double)fh->nROuse*1.3));
+  DBG_PRINT("nROsize=%u, nROuse=%u\n",(unsigned)fh->nROsize,(unsigned)fh->nROuse);
+
   FlashAddr *hashTab = flashAlloc(L, fh->nROsize * WORDSIZE);
   toFlashAddr(L, fh->pROhash, hashTab);
 
@@ -361,10 +367,25 @@ static void *flashCopy(lua_State* L, int n, const char *fmt, void *src) {
 #define PROTO_COPY_MASK  "AHAAAAAASIIIIIIIIAI"
 #endif
 
+static void stripdebug (lua_State *L, Proto *f, int level) {
+  TString* dummy;
+  // Yes, this is leaking memory. In the cross compiler, that's *host* memory, and we don't care.
+  // It's more hassle than it's worth to stop it from doing so.
+  switch (level) {
+    case 3:
+      f->packedlineinfo = NULL;
+    case 2:
+      f->locvars = NULL;
+      f->upvalues = NULL;
+      f->sizelocvars = 0;
+      f->sizeupvalues = 0;
+  }
+}
+
 /*
  * Do the actual prototype copy.
  */
-static void *functionToFlash(lua_State* L, const Proto* orig) {
+static void *functionToFlash(lua_State* L, const Proto* orig, int strip) {
   Proto f;
   int i;
 
@@ -376,23 +397,30 @@ static void *functionToFlash(lua_State* L, const Proto* orig) {
   if (f.sizep) {                /* clone included Protos */
     Proto **p = luaM_newvector(L, f.sizep, Proto *);
     for (i=0; i<f.sizep; i++)
-      p[i] = cast(Proto *, functionToFlash(L, f.p[i]));
+      p[i] = cast(Proto *, functionToFlash(L, f.p[i], strip));
     f.p = cast(Proto **, flashCopy(L, f.sizep, "A", p));
     luaM_freearray(L, p, f.sizep, Proto *);
   }
   f.k = cast(TValue *, flashCopy(L, f.sizek, "V", f.k));
   f.code = cast(Instruction *, flashCopy(L, f.sizecode, "I", f.code));
-
-#ifdef LUA_OPTIMIZE_DEBUG
-  if (f.packedlineinfo) {
-    TString *ts=luaS_new(L, cast(const char *,f.packedlineinfo));
-    f.packedlineinfo = cast(unsigned char *, resolveTString(L, ts)) + sizeof (FlashTS);
+  if (strip)
+  {
+    stripdebug(L,&f,3);
   }
+  else
+  {
+#ifdef LUA_OPTIMIZE_DEBUG
+    if (f.packedlineinfo) {
+      TString *ts=luaS_new(L, cast(const char *,f.packedlineinfo));
+      f.packedlineinfo = cast(unsigned char *, resolveTString(L, ts)) + sizeof (FlashTS);
+    }
 #else
-  f.lineinfo = cast(int *, flashCopy(L, f.sizelineinfo, "I", f.lineinfo));
+    f.lineinfo = cast(int *, flashCopy(L, f.sizelineinfo, "I", f.lineinfo));
 #endif
-  f.locvars = cast(struct LocVar *, flashCopy(L, f.sizelocvars, "SII", f.locvars));
-  f.upvalues = cast(TString **, flashCopy(L, f.sizeupvalues, "S", f.upvalues));
+    f.locvars = cast(struct LocVar *, flashCopy(L, f.sizelocvars, "SII", f.locvars));
+    f.upvalues = cast(TString **, flashCopy(L, f.sizeupvalues, "S", f.upvalues));
+  }
+
   return cast(void *, flashCopy(L, 1, PROTO_COPY_MASK, &f));
 }
 
@@ -403,9 +431,9 @@ uint dumpToFlashImage (lua_State* L, const Proto *main, lua_Writer w,
   FlashHeader *fh = cast(FlashHeader *, flashAlloc(L, sizeof(FlashHeader)));
   int i, status;
   lua_newtable(L);
-  scanProtoStrings(L, main);
+  scanProtoStrings(L, main, strip);
   createROstrt(L,  fh);
-  toFlashAddr(L, fh->mainProto, functionToFlash(L, main));
+  toFlashAddr(L, fh->mainProto, functionToFlash(L, main,strip));
 
   fh->flash_sig = FLASH_SIG + (address ? FLASH_SIG_ABSOLUTE : 0);
   fh->flash_size = curOffset*WORDSIZE;

@@ -134,6 +134,12 @@ static int doargs(int argc, char* argv[])
    dumping=0;
   else if (IS("-s"))			/* strip debug information */
    stripping=1;
+  else if (IS("-s2"))			/* strip debug information */
+   stripping=2;
+  else if (IS("-s3"))			/* strip debug information */
+   stripping=3;
+  else if (IS("-s4"))			/* strip debug information */
+   stripping=4;
   else if (IS("-v"))			/* show version */
    ++version;
   else					/* unknown option */
