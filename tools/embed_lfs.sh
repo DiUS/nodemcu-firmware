@@ -34,7 +34,7 @@ fi
 
 echo "LFS segment address ${LFS_ADDR}, length ${LFS_SIZE}"
 
-${LUAC_CROSS} -a ${LFS_ADDR} -m ${LFS_SIZE} -o ${LUAC_OUTPUT} ${LUA_APP_SRC}
+${LUAC_CROSS} -a ${LFS_ADDR} -m ${LFS_SIZE} -o ${LUAC_OUTPUT} -s3 ${LUA_APP_SRC}
 if [ $? != 0 ]; then
 	echo "Error: luac.cross failed"
 	exit 1
