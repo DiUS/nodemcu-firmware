@@ -32,11 +32,13 @@
  */
 
 #include "driver/lightuart.h"
-#include <esp_intr.h>
 #include <esp_intr_alloc.h>
-#include <esp_clk.h>
+#include <esp32/clk.h>
 #include <esp_log.h>
 #include <soc/uart_struct.h>
+#include <soc/io_mux_reg.h>
+#include <hal/gpio_ll.h>
+#include <driver/gpio.h>
 #include <driver/periph_ctrl.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/queue.h>
@@ -194,7 +196,7 @@ void lightuart_getconfig(uint32_t uart_no, LightUartSetup_t *cfg)
 
 void lightuart_init (uint32_t uart_no, const LightUartSetup_t *cfg, task_handle_t tsk, task_prio_t prio)
 {
-  if (uart_no > 2 || uart_no == CONFIG_CONSOLE_UART_NUM)
+  if (uart_no > 2 || uart_no == CONFIG_ESP_CONSOLE_UART_NUM)
   {
     ESP_LOGE(tag, "invalid uart %d (console conflict?)", uart_no);
     return;

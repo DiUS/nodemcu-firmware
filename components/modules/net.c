@@ -150,8 +150,6 @@ typedef struct lnet_userdata {
       int cb_sent_ref;
       // Only for TCP:
       bool connecting;
-      int hold;
-      size_t num_held;
       size_t num_send;
       int cb_connect_ref;
       int cb_disconnect_ref;
@@ -250,9 +248,8 @@ lnet_userdata *net_create( lua_State *L, enum net_type type ) {
       ud->client.cb_connect_ref = LUA_NOREF;
       ud->client.cb_reconnect_ref = LUA_NOREF;
       ud->client.cb_disconnect_ref = LUA_NOREF;
-      ud->client.hold = 0;
-      ud->client.num_held = 0;
       ud->client.connecting = false;
+      // fall-through
     case TYPE_UDP_SOCKET:
       ud->client.wait_dns = 0;
       ud->client.cb_dns_ref = LUA_NOREF;
@@ -497,7 +494,6 @@ static int net_listen( lua_State *L ) {
       if (!ud->netconn)
         return luaL_error(L, "cannot allocate netconn");
       netconn_set_nonblocking(ud->netconn, 1);
-      netconn_set_noautorecved(ud->netconn, 1);
 
       err = netconn_bind(ud->netconn, &addr, port);
       if (err == ERR_OK) {
@@ -509,7 +505,6 @@ static int net_listen( lua_State *L ) {
       if (!ud->netconn)
         return luaL_error(L, "cannot allocate netconn");
       netconn_set_nonblocking(ud->netconn, 1);
-      netconn_set_noautorecved(ud->netconn, 1);
 
       err = netconn_bind(ud->netconn, &addr, port);
       break;
@@ -557,7 +552,6 @@ static int net_connect( lua_State *L ) {
   if (!ud->netconn)
     return luaL_error(L, "cannot allocate netconn");
   netconn_set_nonblocking(ud->netconn, 1);
-  netconn_set_noautorecved(ud->netconn, 1);
   ud->port = port;
 
   return lnet_socket_resolve_dns(L, ud, domain, true);
@@ -579,6 +573,7 @@ static int net_on( lua_State *L ) {
         { refptr = &ud->client.cb_disconnect_ref; break; }
       if (strcmp("reconnection",name)==0)
         { refptr = &ud->client.cb_reconnect_ref; break; }
+      // fall-through
     case TYPE_UDP_SOCKET:
       if (strcmp("dns",name)==0)
         { refptr = &ud->client.cb_dns_ref; break; }
@@ -680,48 +675,6 @@ static int net_send( lua_State *L ) {
   return lwip_lua_checkerr(L, err);
 }
 
-static int net_fix( lua_State *L ) {
-  lnet_userdata *ud = net_get_udata(L);
-  if (!ud || ud->type != TYPE_UDP_SOCKET || !ud->netconn)
-    return luaL_error(L, "invalid user data");
-  lua_pushinteger(L, ud->netconn->last_err);
-  ud->netconn->last_err=0;
-  return 1;
-}
-
-
-// Lua: client:hold()
-static int net_hold( lua_State *L ) {
-  lnet_userdata *ud = net_get_udata(L);
-  if (!ud || ud->type != TYPE_TCP_CLIENT)
-    return luaL_error(L, "invalid user data");
-  if (!ud->client.hold && ud->netconn)
-  {
-    if (ud->client.hold == 0)
-    {
-      ud->client.hold = 1;
-      ud->client.num_held = 0;
-    }
-  }
-  return 0;
-}
-
-// Lua: client:unhold()
-static int net_unhold( lua_State *L ) {
-  lnet_userdata *ud = net_get_udata(L);
-  if (!ud || ud->type != TYPE_TCP_CLIENT)
-    return luaL_error(L, "invalid user data");
-  if (ud->client.hold && ud->netconn)
-  {
-    if (ud->client.hold != 0)
-    {
-      ud->client.hold = 0;
-      netconn_recved(ud->netconn, ud->client.num_held);
-      ud->client.num_held = 0;
-    }
-  }
-  return 0;
-}
 
 // Lua: client/socket:dns(domain, callback(socket, addr))
 static int net_dns( lua_State *L ) {
@@ -854,6 +807,7 @@ static int net_delete( lua_State *L ) {
       ud->client.cb_disconnect_ref = LUA_NOREF;
       luaL_unref(L, LUA_REGISTRYINDEX, ud->client.cb_reconnect_ref);
       ud->client.cb_reconnect_ref = LUA_NOREF;
+      // fall-through
     case TYPE_UDP_SOCKET:
       luaL_unref(L, LUA_REGISTRYINDEX, ud->client.cb_dns_ref);
       ud->client.cb_dns_ref = LUA_NOREF;
@@ -988,13 +942,13 @@ static int net_getdnsserver( lua_State* L ) {
   // ip_addr_t ipaddr;
   // dns_getserver(numdns,&ipaddr);
   // Bug fix by @md5crypt https://github.com/nodemcu/nodemcu-firmware/pull/500
-  ip_addr_t ipaddr = dns_getserver(numdns);
+  const ip_addr_t *ipaddr = dns_getserver(numdns);
 
-  if ( ip_addr_isany(&ipaddr) ) {
+  if ( ip_addr_isany(ipaddr) ) {
     lua_pushnil( L );
   } else {
     char temp[IP_STR_SZ];
-    ipstr (temp, &ipaddr);
+    ipstr (temp, ipaddr);
     lua_pushstring( L, temp );
   }
 
@@ -1092,17 +1046,8 @@ static void lrecv_cb (lua_State *L, lnet_userdata *ud) {
     }
   } while (netbuf_next(p) != -1);
 
-  if (p) {
+  if (p)
     netbuf_delete(p);
-
-    if (ud->type == TYPE_TCP_CLIENT) {
-      if (ud->client.hold) {
-        ud->client.num_held += len;
-      } else {
-        netconn_recved(ud->netconn, len);
-      }
-    }
-  }
 }
 
 
@@ -1120,7 +1065,6 @@ static void laccept_cb (lua_State *L, lnet_userdata *ud) {
   if (err == ERR_OK) {
     nud->netconn = newconn;
     netconn_set_nonblocking(nud->netconn, 1);
-    netconn_set_noautorecved(nud->netconn, 1);
     nud->netconn->pcb.tcp->so_options |= SOF_KEEPALIVE;
     nud->netconn->pcb.tcp->keep_idle = ud->server.timeout * 1000;
     nud->netconn->pcb.tcp->keep_cnt = 1;
@@ -1177,6 +1121,7 @@ static int net_aton( lua_State* L ) {
   return 1;
 }
 
+
 // --- Tables
 
 // Module function map
@@ -1193,8 +1138,6 @@ LROT_BEGIN(net_tcpsocket)
   LROT_FUNCENTRY( close,   net_close )
   LROT_FUNCENTRY( on,      net_on )
   LROT_FUNCENTRY( send,    net_send )
-  LROT_FUNCENTRY( hold,    net_hold )
-  LROT_FUNCENTRY( unhold,  net_unhold )
   LROT_FUNCENTRY( dns,     net_dns )
   LROT_FUNCENTRY( getpeer, net_getpeer )
   LROT_FUNCENTRY( getaddr, net_getaddr )
@@ -1205,7 +1148,6 @@ LROT_END(net_tcpsocket, NULL, 0)
 LROT_BEGIN(net_udpsocket)
   LROT_FUNCENTRY( listen,  net_listen )
   LROT_FUNCENTRY( close,   net_close )
-  LROT_FUNCENTRY( fix,     net_fix )
   LROT_FUNCENTRY( on,      net_on )
   LROT_FUNCENTRY( send,    net_send )
   LROT_FUNCENTRY( dns,     net_dns )

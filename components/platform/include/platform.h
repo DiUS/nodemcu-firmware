@@ -23,13 +23,13 @@ enum
 };
 
 
-#if CONFIG_NODE_DEBUG
+#if CONFIG_NODEMCU_NODE_DEBUG
 # define NODE_DBG printf
 #else
 # define NODE_DBG(...) do{}while(0)
 #endif
 
-#if CONFIG_NODE_ERR
+#if CONFIG_NODEMCU_NODE_ERR
 # define NODE_ERR printf
 #else
 # define NODE_ERR(...) do{}while(0)
@@ -251,6 +251,7 @@ int platform_flash_erase_sector( uint32_t sector_id );
 
 #define PLATFORM_PARTITION_SUBTYPE_DIUS_FLASHFIFO 0x00
 #define PLATFORM_PARTITION_SUBTYPE_DIUS_ROMCFG    0x01
+
 
 typedef struct {
   uint8_t  label[16];

@@ -361,12 +361,12 @@ err:
 
 static bool rotate_dns_servers(uint8_t rotations_done)
 {
-  ip_addr_t dns0=dns_getserver(0);
+  ip_addr_t dns0=*dns_getserver(0);
 
   int from;
   for (from=1;from<DNS_MAX_SERVERS;from++)
   {
-    ip_addr_t tmp=dns_getserver(from);
+    ip_addr_t tmp=*dns_getserver(from);
     if (ip_addr_isany_val(tmp))
       break;
     dns_setserver(from-1,&tmp);

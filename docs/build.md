@@ -3,9 +3,7 @@ There are essentially three ways to build your NodeMCU firmware: cloud build ser
 ## Tools
 
 ### Cloud Build Service
-<del>NodeMCU "application developers" just need a ready-made firmware. There's a [cloud build service](http://nodemcu-build.com/) with a nice UI and configuration options for them.</del>
-
-Not available yet.
+NodeMCU "application developers" just need a ready-made firmware. There's a [cloud build service](https://nodemcu-build.com/) with a nice UI and configuration options for them.
 
 ### Docker Image
 Occasional NodeMCU firmware hackers don't need full control over the complete tool chain. They might not want to setup a Linux VM with the build environment. Docker to the rescue. Give [Docker NodeMCU build](https://hub.docker.com/r/marcelstoer/nodemcu-build/) a try.
@@ -17,13 +15,28 @@ Occasional NodeMCU firmware hackers don't need full control over the complete to
 ### Linux Build Environment
 NodeMCU firmware developers commit or contribute to the project on GitHub and might want to build their own full fledged build environment with the complete tool chain.
 
+#### Build environment dependencies, tools and libraries:
+
+#### Ubuntu:
+
+```bash
+sudo apt-get install -y gperf python-pip python-dev flex bison build-essential libssl-dev libffi-dev libncurses5-dev libncursesw5-dev libreadline-dev cmake
+```
+
+#### Setting up the repository
+
 Run the following command for a new checkout from scratch. This will fetch the nodemcu repo, checkout the `dev-esp32` branch and finally pull all submodules:
 
 ```
 git clone --branch dev-esp32 --recurse-submodules https://github.com/nodemcu/nodemcu-firmware.git nodemcu-firmware-esp32
 ```
 
-The `make` command initiates the build process, which will start with the configuration menu to set the build options.
+To install the prerequisites for the ESP32 SDK and NodeMCU components, run:
+```
+./install.sh
+```
+
+The `make menuconfig` command initiates the build process, which will start with the configuration menu to set the build options.
 
 !!! important
 
@@ -36,6 +49,10 @@ git pull origin dev-esp32
 git submodule init #only if repo was cloned w/o submodules init
 git submodule update --recursive
 ```
+
+Here is a video walk through by John Lauer (ChiliPeppr) of building the firmware in Linux from scratch with a fresh install of Ubuntu 19 so you can see all of the dependencies needed to get your build completed and flashed to your ESP32 device.
+
+[![Video walk through for Linux Build Environment](https://img.youtube.com/vi/x6CGECsioYg/0.jpg)](https://www.youtube.com/watch?v=x6CGECsioYg "Video walk through for Linux Build Environment")
 
 ## Build Options
 

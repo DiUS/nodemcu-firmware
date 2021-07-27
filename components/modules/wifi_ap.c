@@ -1,5 +1,5 @@
 /*
- * Copyright 2016 Dius Computing Pty Ltd. All rights reserved.
+ * Copyright 2016-2021 Dius Computing Pty Ltd. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -38,66 +38,75 @@
 #include "nodemcu_esp_event.h"
 #include <string.h>
 #include "dhcpserver/dhcpserver_options.h"
-
+#include "esp_netif.h"
 
 // Note: these are documented in wifi.md, update there too if changed here!
 #define DEFAULT_AP_CHANNEL 11
 #define DEFAULT_AP_MAXCONNS 4
 #define DEFAULT_AP_BEACON 100
 
+static esp_netif_t *wifi_ap = NULL;
+
 // --- Event handling ----------------------------------------------------
-static void ap_staconn (lua_State *L, const system_event_t *evt);
-static void ap_stadisconn (lua_State *L, const system_event_t *evt);
-static void ap_probe_req (lua_State *L, const system_event_t *evt);
-static void empty_arg (lua_State *L, const system_event_t *evt) {}
+static void ap_staconn (lua_State *L, const void *data);
+static void ap_stadisconn (lua_State *L, const void *data);
+static void ap_probe_req (lua_State *L, const void *data);
+static void empty_arg (lua_State *L, const void *data) {}
 
 static const event_desc_t events[] =
 {
-  { "start",             SYSTEM_EVENT_AP_START,            empty_arg     },
-  { "stop",              SYSTEM_EVENT_AP_STOP,             empty_arg     },
-  { "sta_connected",     SYSTEM_EVENT_AP_STACONNECTED,     ap_staconn    },
-  { "sta_disconnected",  SYSTEM_EVENT_AP_STADISCONNECTED,  ap_stadisconn },
-  { "probe_req",         SYSTEM_EVENT_AP_PROBEREQRECVED,   ap_probe_req  }
+  { "start",            &WIFI_EVENT, WIFI_EVENT_AP_START,           empty_arg },
+  { "stop",             &WIFI_EVENT, WIFI_EVENT_AP_STOP,            empty_arg },
+  { "sta_connected",    &WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED,    ap_staconn},
+  { "sta_disconnected", &WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED, ap_stadisconn },
+  { "probe_req",        &WIFI_EVENT, WIFI_EVENT_AP_PROBEREQRECVED,  ap_probe_req },
 };
 
 static int event_cb[ARRAY_LEN(events)];
 
-static void ap_staconn (lua_State *L, const system_event_t *evt)
+static void ap_staconn (lua_State *L, const void *data)
 {
+  const wifi_event_ap_staconnected_t *sta_connected =
+    (const wifi_event_ap_staconnected_t *)data;
   char mac[MAC_STR_SZ];
-  macstr (mac, evt->event_info.sta_connected.mac);
+  macstr (mac, sta_connected->mac);
   lua_pushstring (L, mac);
   lua_setfield (L, -2, "mac");
 
-  lua_pushinteger (L, evt->event_info.sta_connected.aid);
+  lua_pushinteger (L, sta_connected->aid);
   lua_setfield (L, -2, "id");
 }
 
-static void ap_stadisconn (lua_State *L, const system_event_t *evt)
+static void ap_stadisconn (lua_State *L, const void *data)
 {
+  const wifi_event_ap_stadisconnected_t *sta_disconnected =
+    (const wifi_event_ap_stadisconnected_t *)data;
+
   char mac[MAC_STR_SZ];
-  macstr (mac, evt->event_info.sta_disconnected.mac);
+  macstr (mac, sta_disconnected->mac);
   lua_pushstring (L, mac);
   lua_setfield (L, -2, "mac");
 
-  lua_pushinteger (L, evt->event_info.sta_disconnected.aid);
+  lua_pushinteger (L, sta_disconnected->aid);
   lua_setfield (L, -2, "id");
 }
 
-static void ap_probe_req (lua_State *L, const system_event_t *evt)
+static void ap_probe_req (lua_State *L, const void *data)
 {
+  const wifi_event_ap_probe_req_rx_t *ap_probereqrecved =
+    (const wifi_event_ap_probe_req_rx_t *)data;
   char str[MAC_STR_SZ];
-  macstr (str, evt->event_info.ap_probereqrecved.mac);
+  macstr (str, ap_probereqrecved->mac);
   lua_pushstring (L, str);
   lua_setfield (L, -2, "from");
 
-  lua_pushinteger (L, evt->event_info.ap_probereqrecved.rssi);
+  lua_pushinteger (L, ap_probereqrecved->rssi);
   lua_setfield (L, -2, "rssi");
 }
 
-static void on_event (const system_event_t *evt)
+static void on_event (esp_event_base_t base, int32_t id, const void *data)
 {
-  int idx = wifi_event_idx_by_id (events, ARRAY_LEN(events), evt->event_id);
+  int idx = wifi_event_idx_by_id (events, ARRAY_LEN(events), base, id);
   if (idx < 0 || event_cb[idx] == LUA_NOREF)
     return;
 
@@ -105,18 +114,20 @@ static void on_event (const system_event_t *evt)
   lua_rawgeti (L, LUA_REGISTRYINDEX, event_cb[idx]);
   lua_pushstring (L, events[idx].name);
   lua_createtable (L, 0, 5);
-  events[idx].fill_cb_arg (L, evt);
+  events[idx].fill_cb_arg (L, data);
   lua_call (L, 2, 0);
 }
 
-NODEMCU_ESP_EVENT(SYSTEM_EVENT_AP_START,            on_event);
-NODEMCU_ESP_EVENT(SYSTEM_EVENT_AP_STOP,             on_event);
-NODEMCU_ESP_EVENT(SYSTEM_EVENT_AP_STACONNECTED,     on_event);
-NODEMCU_ESP_EVENT(SYSTEM_EVENT_AP_STADISCONNECTED,  on_event);
-NODEMCU_ESP_EVENT(SYSTEM_EVENT_AP_PROBEREQRECVED,   on_event);
+NODEMCU_ESP_EVENT(WIFI_EVENT, WIFI_EVENT_AP_START,            on_event);
+NODEMCU_ESP_EVENT(WIFI_EVENT, WIFI_EVENT_AP_STOP,             on_event);
+NODEMCU_ESP_EVENT(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED,     on_event);
+NODEMCU_ESP_EVENT(WIFI_EVENT, WIFI_EVENT_AP_STADISCONNECTED,  on_event);
+NODEMCU_ESP_EVENT(WIFI_EVENT, WIFI_EVENT_AP_PROBEREQRECVED,   on_event);
 
 void wifi_ap_init (void)
 {
+  wifi_ap = esp_netif_create_default_wifi_ap();
+
   for (unsigned i = 0; i < ARRAY_LEN(event_cb); ++i)
     event_cb[i] = LUA_NOREF;
 }
@@ -125,57 +136,50 @@ void wifi_ap_init (void)
 
 static int wifi_ap_setip(lua_State *L)
 {
-  tcpip_adapter_ip_info_t ipInfo;
-  ip_addr_t  dns;
-  uint8_t opt;
-  size_t len;
-  const char *str;
-
-  ip_addr_t ipAddr;
-  ipAddr.type = IPADDR_TYPE_V4;
-
   luaL_checkanytable (L, 1);
 
-  //memset(&ipInfo, 0, sizeof(tcpip_adapter_ip_info_t));
+  size_t len = 0;
+  const char *str = NULL;
+  esp_netif_ip_info_t ip_info = { 0, };
 
   lua_getfield (L, 1, "ip");
   str = luaL_checklstring (L, -1, &len);
-  if(!ipaddr_aton(str, &ipAddr))
+  if (esp_netif_str_to_ip4(str, &ip_info.ip) != ESP_OK)
   {
     return luaL_error(L, "Could not parse IP address, aborting");
   }
-  ipInfo.ip = ipAddr.u_addr.ip4;
 
   lua_getfield (L, 1, "gateway");
   str = luaL_checklstring (L, -1, &len);
-  if(!ipaddr_aton(str, &ipAddr))
+  if (esp_netif_str_to_ip4(str, &ip_info.gw) != ESP_OK)
   {
     return luaL_error(L, "Could not parse Gateway address, aborting");
   }
-  ipInfo.gw = ipAddr.u_addr.ip4;
 
   lua_getfield (L, 1, "netmask");
   str = luaL_checklstring (L, -1, &len);
-  if(!ipaddr_aton(str, &ipAddr))
+  if (esp_netif_str_to_ip4(str, &ip_info.netmask) != ESP_OK)
   {
     return luaL_error(L, "Could not parse Netmask, aborting");
   }
-  ipInfo.netmask = ipAddr.u_addr.ip4;
 
-  ESP_ERROR_CHECK(tcpip_adapter_dhcps_stop(TCPIP_ADAPTER_IF_AP));
+  ESP_ERROR_CHECK(esp_netif_dhcps_stop(wifi_ap));
 
-  tcpip_adapter_set_ip_info(TCPIP_ADAPTER_IF_AP, &ipInfo);
+  esp_netif_set_ip_info(wifi_ap, &ip_info);
 
+  esp_netif_dns_info_t dns = { .ip = { .type = ESP_IPADDR_TYPE_V4  } };
   lua_getfield (L, 1, "dns");
   str = luaL_optlstring(L, -1, "", &len);
-  if(ipaddr_aton(str, &dns))
+  if (*str)
   {
-    opt = 1;
-    dhcps_dns_setserver(&dns);
-    tcpip_adapter_dhcps_option(TCPIP_ADAPTER_OP_SET, DOMAIN_NAME_SERVER, &opt, sizeof(opt));
+    if (esp_netif_str_to_ip4(str, &dns.ip.u_addr.ip4) != ESP_OK)
+    {
+      return luaL_error(L, "Could not parse Dns, aborting");
+    }
+    esp_netif_set_dns_info(wifi_ap, ESP_NETIF_DNS_MAIN, &dns);
   }
 
-  ESP_ERROR_CHECK(tcpip_adapter_dhcps_start(TCPIP_ADAPTER_IF_AP));
+  ESP_ERROR_CHECK(esp_netif_dhcps_start(wifi_ap));
 
   return 0;
 }
@@ -186,7 +190,7 @@ static int wifi_ap_sethostname(lua_State *L)
   esp_err_t err;
   const char *hostname = luaL_checklstring(L, 1, &l);
 
-  err = tcpip_adapter_set_hostname(TCPIP_ADAPTER_IF_AP, hostname);
+  err = esp_netif_set_hostname(wifi_ap,  hostname);
 
   if (err != ESP_OK)
     return luaL_error (L, "failed to set hostname, code %d", err);

@@ -15,7 +15,7 @@ Provides a Base64 representation of a (binary) Lua string.
 #### Parameters
 `binary` input string to Base64 encode
 
-#### Return
+#### Returns
 A Base64 encoded string.
 
 #### Example
@@ -29,12 +29,12 @@ Decodes a Base64 representation of a (binary) Lua string back into the original 
 thrown if the string is not a valid base64 encoding.
 
 #### Syntax
-`binary_string = encoder.toBase64(b64)`
+`binary_string = encoder.fromBase64(b64)`
 
 #### Parameters
 `b64` Base64 encoded input string 
 
-#### Return
+#### Returns
 The decoded Lua (binary) string.
 
 #### Example

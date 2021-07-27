@@ -25,12 +25,14 @@ pages:
     - Building the firmware: 'build.md'
     - Flashing the firmware: 'flash.md'
     - Uploading code: 'upload.md'
+    - JTAG debugging: 'debug.md'
     - Support: 'support.md'
 - FAQs:
     - Lua Developer FAQ: 'lua-developer-faq.md'
     - Extension Developer FAQ: 'extn-developer-faq.md'
 - Whitepapers:
     - Filesystem on SD card: 'sdcard.md'
+    - Writing external C modules: 'modules/extmods.md'
 - C Modules:
     - 'adc':          'modules/adc.md'
     - 'bit':          'modules/bit.md'
@@ -40,6 +42,7 @@ pages:
     - 'dac':          'modules/dac.md'
     - 'dht':          'modules/dht.md'
     - 'encoder':      'modules/encoder.md'
+    - 'eth':          'modules/eth.md'
     - 'file':         'modules/file.md'
     - 'gpio':         'modules/gpio.md'
     - 'http':         'modules/http.md'
@@ -49,6 +52,7 @@ pages:
     - 'mqtt':         'modules/mqtt.md'
     - 'net':          'modules/net.md'
     - 'node':         'modules/node.md'
+    - 'ota':          'modules/otaupgrade.md'
     - 'ow (1-Wire)':  'modules/ow.md'
     - 'pulsecnt':     'modules/pulsecnt.md'
     - 'qrcodegen':    'modules/qrcodegen.md'
@@ -60,6 +64,7 @@ pages:
     - 'struct':       'modules/struct.md'
     - 'time':         'modules/time.md'
     - 'tmr':          'modules/tmr.md'
+    - 'touch':        'modules/touch.md'
     - 'u8g2':         'modules/u8g2.md'
     - 'uart':         'modules/uart.md'
     - 'ucg':          'modules/ucg.md'

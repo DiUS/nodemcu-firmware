@@ -27,60 +27,66 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include <esp_task.h>
-#include <esp_log.h>
 
 #define SIG_LUA 0
 #define SIG_UARTINPUT 1
 
+// We don't get argument size data from the esp_event dispatch, so it's
+// not possible to copy and forward events from the default event queue
+// to one running within our task context. To cope with this, we instead
+// have to effectively make a blocking inter-task call, by having our
+// default loop handler post a nodemcu task event with a pointer to the
+// event data, and then *block* until that task event has been processed.
+// This is less elegant than I would like, but trying to run the entire
+// LVM in the context of the system default event loop RTOS task is an
+// even worse idea, so here we are.
+typedef struct {
+  esp_event_base_t  event_base;
+  int32_t           event_id;
+  void             *event_data;
+} relayed_event_t;
+static task_handle_t     relayed_event_task;
+static SemaphoreHandle_t relayed_event_handled;
 
-static task_handle_t esp_event_task;
-static QueueHandle_t esp_event_queue;
 
-// We provide our own esp_event_send which hooks into the NodeMCU task
-// task framework, and ensures all events are handled in the same context
-// as the LVM, making life as easy as possible for us.
-esp_err_t esp_event_send (system_event_t *event)
+// This function runs in the context of the system default event loop RTOS task
+static void relay_default_loop_events(
+  void *arg, esp_event_base_t base, int32_t id, void *data)
 {
-  if (!event)
-    return ESP_ERR_INVALID_ARG;
-
-  if (!esp_event_task || !esp_event_queue)
-    return ESP_ERR_INVALID_STATE; // too early!
-
-  portBASE_TYPE ret = xQueueSendToBack (esp_event_queue, event, 0);
-  if (ret != pdPASS)
-  {
-    NODE_ERR("failed to queue esp event %d", event->event_id);
-    return ESP_FAIL;
-  }
-
-  // If the task_post() fails, it only means the event gets delayed, hence
-  // we claim OK regardless.
-  task_post_medium (esp_event_task, 0);
-  return ESP_OK;
+  (void)arg;
+  relayed_event_t event = {
+    .event_base = base,
+    .event_id = id,
+    .event_data = data,
+  };
+  _Static_assert(sizeof(&event) >= sizeof(task_param_t), "pointer-vs-int");
+  // Only block if we actually posted the request, otherwise we'll deadlock!
+  if (task_post_medium(relayed_event_task, (intptr_t)&event))
+    xSemaphoreTake(relayed_event_handled, portMAX_DELAY);
+  else
+    printf("ERROR: failed to forward esp event %s/%d", base, id);
 }
 
 
-static void handle_esp_event (task_param_t param, task_prio_t prio)
+static void handle_default_loop_event(task_param_t param, task_prio_t prio)
 {
-  (void)param;
   (void)prio;
+  const relayed_event_t *event = (const relayed_event_t *)param;
 
-  system_event_t evt;
-  while (xQueueReceive (esp_event_queue, &evt, 0) == pdPASS)
+  nodemcu_esp_event_reg_t *evregs = &_esp_event_cb_table_start;
+  for (; evregs < &_esp_event_cb_table_end; ++evregs)
   {
-    esp_err_t ret = esp_event_process_default (&evt);
-    if (ret != ESP_OK)
-      NODE_ERR("default event handler failed for %d", evt.event_id);
+    bool event_base_match =
+      (evregs->event_base_ptr == NULL) || // ESP_EVENT_ANY_BASE marker
+      (*evregs->event_base_ptr == event->event_base);
+    bool event_id_match =
+      (evregs->event_id == event->event_id) ||
+      (evregs->event_id == ESP_EVENT_ANY_ID);
 
-    nodemcu_esp_event_reg_t *evregs;
-    for (evregs = &esp_event_cb_table; evregs->callback; ++evregs)
-    {
-      if (evregs->event_id == evt.event_id)
-        evregs->callback (&evt);
-    }
+    if (event_base_match && event_id_match)
+      evregs->callback(event->event_base, event->event_id, event->event_data);
   }
+  xSemaphoreGive(relayed_event_handled);
 }
 
 
@@ -130,7 +136,7 @@ void nodemcu_init(void)
         return;
     }
 
-#if defined ( CONFIG_BUILD_SPIFFS )
+#if defined ( CONFIG_NODEMCU_BUILD_SPIFFS )
     // This can take a while, so be nice and provide some feedback while waiting
     printf ("Mounting flash filesystem...\n");
     if (!vfs_mount("/FLASH", 0)) {
@@ -146,25 +152,29 @@ void nodemcu_init(void)
 }
 
 
-void nodemcu_main (void *unused)
+void __attribute__((noreturn)) app_main(void)
 {
-  (void)unused;
-
   task_init();
-
-  esp_event_queue =
-    xQueueCreate (CONFIG_SYSTEM_EVENT_QUEUE_SIZE, sizeof (system_event_t));
-  esp_event_task = task_get_id (handle_esp_event);
 
   input_task = task_get_id (handle_input);
 
+  relayed_event_handled = xSemaphoreCreateBinary();
+  relayed_event_task = task_get_id(handle_default_loop_event);
+
+  esp_event_loop_create_default();
+  esp_event_handler_register(
+    ESP_EVENT_ANY_BASE,
+    ESP_EVENT_ANY_ID,
+    relay_default_loop_events,
+    NULL);
+
   ConsoleSetup_t cfg;
-  cfg.bit_rate  = CONFIG_CONSOLE_BIT_RATE;
+  cfg.bit_rate  = CONFIG_NODEMCU_CONSOLE_BIT_RATE;
   cfg.data_bits = CONSOLE_NUM_BITS_8;
   cfg.parity    = CONSOLE_PARITY_NONE;
   cfg.stop_bits = CONSOLE_STOP_BITS_1;
   cfg.auto_baud = 
-#ifdef CONFIG_CONSOLE_BIT_RATE_AUTO
+#ifdef CONFIG_NODEMCU_CONSOLE_BIT_RATE_AUTO
     true;
 #else
     false;
@@ -176,27 +186,9 @@ void nodemcu_main (void *unused)
   nodemcu_init ();
 
   nvs_flash_init ();
-  tcpip_adapter_init ();
+  esp_netif_init ();
 
   start_lua ();
   task_pump_messages ();
   __builtin_unreachable ();
-}
-
-
-void app_main(void)
-{
-#define fmt "Lua VM core affinity: %s"
-#if CONFIG_FREERTOS_UNICORE || CONFIG_NODEMCU_TASK_AFFINITY_CORE0
-  // Only one core available, or already bound to it, no point juggling
-  ESP_LOGI("main", fmt, "PRO");
-  nodemcu_main(NULL);
-#else
-  ESP_LOGI("main", fmt, "APP");
-  xTaskCreatePinnedToCore(
-    nodemcu_main, "main", // the old "main" task dies when we exit app_main
-    ESP_TASK_MAIN_STACK, NULL,
-    ESP_TASK_MAIN_PRIO, NULL, 1);
-#endif
-#undef fmt
 }

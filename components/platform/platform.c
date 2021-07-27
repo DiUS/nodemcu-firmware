@@ -39,7 +39,7 @@ extern bool uart_on_error_cb(unsigned id, const char *buf, size_t len);
 
 uart_status_t uart_status[NUM_UART];
 
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODEMCU_LIGHT_UART_DRIVER
 
 static task_handle_t uart_task;
 
@@ -86,6 +86,9 @@ void handle_lightuart_events(task_param_t param, task_prio_t prio)
 #else
 
 SemaphoreHandle_t sem = NULL;
+
+extern bool uart_on_data_cb(unsigned id, const char *buf, size_t len);
+extern bool uart_on_error_cb(unsigned id, const char *buf, size_t len);
 
 task_handle_t uart_event_task_id = 0;
 
@@ -259,14 +262,14 @@ uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int pari
   }
   else
   {
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODEMCU_LIGHT_UART_DRIVER
     static const unsigned q_sizes[] = {
-      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_RX0,
-      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_TX0,
-      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_RX1,
-      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_TX1,
-      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_RX2,
-      CONFIG_LIGHT_UART_DRIVER_Q_SIZE_TX2,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_Q_SIZE_RX0,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_Q_SIZE_TX0,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_Q_SIZE_RX1,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_Q_SIZE_TX1,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_Q_SIZE_RX2,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_Q_SIZE_TX2,
     };
     LightUartSetup_t cfg;
     cfg.bit_rate = baud;
@@ -301,31 +304,31 @@ uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int pari
     cfg.rx_q_size = q_sizes[id*2 + 0];
     cfg.tx_q_size = q_sizes[id*2 + 1];
 
-#ifndef CONFIG_LIGHT_UART_DRIVER_INV_RX0
-# define CONFIG_LIGHT_UART_DRIVER_INV_RX0 0
+#ifndef CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX0
+# define CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX0 0
 #endif
-#ifndef CONFIG_LIGHT_UART_DRIVER_INV_TX0
-# define CONFIG_LIGHT_UART_DRIVER_INV_TX0 0
+#ifndef CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX0
+# define CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX0 0
 #endif
-#ifndef CONFIG_LIGHT_UART_DRIVER_INV_RX1
-# define CONFIG_LIGHT_UART_DRIVER_INV_RX1 0
+#ifndef CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX1
+# define CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX1 0
 #endif
-#ifndef CONFIG_LIGHT_UART_DRIVER_INV_TX1
-# define CONFIG_LIGHT_UART_DRIVER_INV_TX1 0
+#ifndef CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX1
+# define CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX1 0
 #endif
-#ifndef CONFIG_LIGHT_UART_DRIVER_INV_RX2
-# define CONFIG_LIGHT_UART_DRIVER_INV_RX2 0
+#ifndef CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX2
+# define CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX2 0
 #endif
-#ifndef CONFIG_LIGHT_UART_DRIVER_INV_TX2
-# define CONFIG_LIGHT_UART_DRIVER_INV_TX2 0
+#ifndef CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX2
+# define CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX2 0
 #endif
     static const bool invs[] = {
-      CONFIG_LIGHT_UART_DRIVER_INV_RX0,
-      CONFIG_LIGHT_UART_DRIVER_INV_TX0,
-      CONFIG_LIGHT_UART_DRIVER_INV_RX1,
-      CONFIG_LIGHT_UART_DRIVER_INV_TX1,
-      CONFIG_LIGHT_UART_DRIVER_INV_RX2,
-      CONFIG_LIGHT_UART_DRIVER_INV_TX2,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX0,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX0,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX1,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX1,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_RX2,
+      CONFIG_NODEMCU_LIGHT_UART_DRIVER_INV_TX2,
     };
     cfg.rx_inv = invs[id*2 + 0];
     cfg.tx_inv = invs[id*2 + 1];
@@ -372,10 +375,10 @@ uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int pari
     }
     uart_param_config(id, &cfg);
     uart_set_pin(id, pins->tx_pin, pins->rx_pin, pins->rts_pin, pins->cts_pin);
-    uart_set_line_inverse(id, (pins->tx_inverse? UART_INVERSE_TXD : UART_INVERSE_DISABLE)
-                                | (pins->rx_inverse? UART_INVERSE_RXD : UART_INVERSE_DISABLE)
-                                | (pins->rts_inverse? UART_INVERSE_RTS : UART_INVERSE_DISABLE)
-                                | (pins->cts_inverse? UART_INVERSE_CTS : UART_INVERSE_DISABLE)
+    uart_set_line_inverse(id, (pins->tx_inverse? UART_TXD_INV_M : 0)
+                                | (pins->rx_inverse? UART_RXD_INV_M : 0)
+                                | (pins->rts_inverse? UART_RTS_INV_M : 0)
+                                | (pins->cts_inverse? UART_CTS_INV_M : 0)
                         );
 
     if(uart_event_task_id == 0) uart_event_task_id = task_get_id( uart_event_task );
@@ -386,7 +389,7 @@ uint32_t platform_uart_setup( unsigned id, uint32_t baud, int databits, int pari
 
 void platform_uart_setmode(unsigned id, unsigned mode)
 {
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODEMCU_LIGHT_UART_DRIVER
   (void)id;
   (void)mode;
   ESP_LOGW(UART_TAG, "mode setting not supported in light uart driver");
@@ -419,7 +422,7 @@ void platform_uart_send_multi( unsigned id, const char *data, size_t len )
         putchar (data[ i ]);
     }
   } else {
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODEMCU_LIGHT_UART_DRIVER
     lightuart_write_bytes(id, data, len);
 #else
     uart_write_bytes(id, data, len);
@@ -432,7 +435,7 @@ void platform_uart_send( unsigned id, uint8_t data )
   if (id == CONSOLE_UART)
     putchar (data);
   else
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODEMCU_LIGHT_UART_DRIVER
     lightuart_write_bytes(id, &data, 1);
 #else
     uart_write_bytes(id, (const char *)&data, 1);
@@ -453,7 +456,7 @@ int platform_uart_start( unsigned id )
   else {
     uart_status_t *us = &uart_status[id];
 
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODEMCU_LIGHT_UART_DRIVER
     us->line_buffer = malloc(LUA_MAXINPUT);
     us->line_position = 0;
 #else
@@ -489,7 +492,7 @@ void platform_uart_stop( unsigned id )
     ;
   else {
     uart_status_t *us = & uart_status[id];  
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODE_LIGHT_UART_DRIVER
    free(us->line_buffer);
    us->line_buffer = NULL;
 #else
@@ -503,7 +506,7 @@ void platform_uart_stop( unsigned id )
 }
 
 int platform_uart_get_config(unsigned id, uint32_t *baudp, uint32_t *databitsp, uint32_t *parityp, uint32_t *stopbitsp) {
-#if CONFIG_LIGHT_UART_DRIVER
+#if CONFIG_NODEMCU_LIGHT_UART_DRIVER
     LightUartSetup_t cfg;
     lightuart_getconfig(id, &cfg);
     *baudp = cfg.bit_rate;
@@ -817,205 +820,3 @@ int platform_i2c_recv_byte( unsigned id, int ack ){
 #endif
 
 int platform_i2c_exists( unsigned id ) { return id < I2C_NUM_MAX; }
-
-
-////////////////////////////////
-// The IDF panic/unhandled exception handler sometimes hangs in
-// esp_ota_get_app_elf_sha256(), which prevents automatic reboot.
-// As that is in the IDF, we can't (easily) patch it, so instead we
-// provide alternative (simpler) handlers here and use the linker's
-// ability to wrap the references
-////////////////////////////////
-
-
-#include "soc/cpu.h"
-#include "soc/rtc.h"
-#include "soc/rtc_cntl_reg.h"
-#include "soc/timer_group_struct.h"
-#include "soc/timer_group_reg.h"
-#include "esp_panic.h"
-
-static void reconfigureAllWdts()
-{
-    TIMERG0.wdt_wprotect = TIMG_WDT_WKEY_VALUE;
-    TIMERG0.wdt_feed = 1;
-    TIMERG0.wdt_config0.sys_reset_length = 7;           //3.2uS
-    TIMERG0.wdt_config0.cpu_reset_length = 7;           //3.2uS
-    TIMERG0.wdt_config0.stg0 = TIMG_WDT_STG_SEL_RESET_SYSTEM; //1st stage timeout: reset system
-    TIMERG0.wdt_config1.clk_prescale = 80 * 500;        //Prescaler: wdt counts in ticks of 0.5mS
-    TIMERG0.wdt_config2 = 2000;                         //1 second before reset
-    TIMERG0.wdt_config0.en = 1;
-    TIMERG0.wdt_wprotect = 0;
-    //Disable wdt 1
-    TIMERG1.wdt_wprotect = TIMG_WDT_WKEY_VALUE;
-    TIMERG1.wdt_config0.en = 0;
-    TIMERG1.wdt_wprotect = 0;
-}
-
-static void panicPutChar(char c)
-{
-    while (((READ_PERI_REG(UART_STATUS_REG(CONFIG_CONSOLE_UART_NUM)) >> UART_TXFIFO_CNT_S)&UART_TXFIFO_CNT) >= 126) ;
-    WRITE_PERI_REG(UART_FIFO_REG(CONFIG_CONSOLE_UART_NUM), c);
-}
-
-static void panicPutStr(const char *c)
-{
-    int x = 0;
-    while (c[x] != 0) {
-        panicPutChar(c[x]);
-        x++;
-    }
-}
-
-static void panicPutHex(int a)
-{
-    int x;
-    int c;
-    for (x = 0; x < 8; x++) {
-        c = (a >> 28) & 0xf;
-        if (c < 10) {
-            panicPutChar('0' + c);
-        } else {
-            panicPutChar('a' + c - 10);
-        }
-        a <<= 4;
-    }
-}
-
-static void panicPutDec(int a)
-{
-    int n1, n2;
-    n1 = a % 10;
-    n2 = a / 10;
-    if (n2 == 0) {
-        panicPutChar(' ');
-    } else {
-        panicPutChar(n2 + '0');
-    }
-    panicPutChar(n1 + '0');
-}
-
-static void haltOtherCore()
-{
-    esp_cpu_stall( xPortGetCoreID() == 0 ? 1 : 0 );
-}
-
-static void esp_panic_dig_reset()
-{
-    // make sure all the panic handler output is sent from UART FIFO
-    uart_tx_wait_idle(CONFIG_CONSOLE_UART_NUM);
-    // switch to XTAL (otherwise we will keep running from the PLL)
-    rtc_clk_cpu_freq_set_xtal();
-    // reset the digital part
-    esp_cpu_unstall(PRO_CPU_NUM);
-    SET_PERI_REG_MASK(RTC_CNTL_OPTIONS0_REG, RTC_CNTL_SW_SYS_RST);
-    while (true) {
-        ;
-    }
-}
-
-static void commonErrorHandler_dump(XtExcFrame *frame, int core_id)
-{
-    int *regs = (int *)frame;
-    int x, y;
-    const char *sdesc[] = {
-        "PC      ", "PS      ", "A0      ", "A1      ", "A2      ", "A3      ", "A4      ", "A5      ",
-        "A6      ", "A7      ", "A8      ", "A9      ", "A10     ", "A11     ", "A12     ", "A13     ",
-        "A14     ", "A15     ", "SAR     ", "EXCCAUSE", "EXCVADDR", "LBEG    ", "LEND    ", "LCOUNT  "
-    };
-
-    reconfigureAllWdts();
-
-    /* only dump registers for 'real' crashes, if crashing via abort()
-       the register window is no longer useful.
-    */
-    panicPutStr("Core");
-    panicPutDec(core_id);
-    panicPutStr(" register dump:\r\n");
-
-    for (x = 0; x < 24; x += 4) {
-      for (y = 0; y < 4; y++) {
-        if (sdesc[x + y][0] != 0) {
-          panicPutStr(sdesc[x + y]);
-          panicPutStr(": 0x");
-          panicPutHex(regs[x + y + 1]);
-          panicPutStr("  ");
-        }
-      }
-      panicPutStr("\r\n");
-    }
-}
-
-static const char *edesc[] = {
-    "IllegalInstruction", "Syscall", "InstructionFetchError", "LoadStoreError",
-    "Level1Interrupt", "Alloca", "IntegerDivideByZero", "PCValue",
-    "Privileged", "LoadStoreAlignment", "res", "res",
-    "InstrPDAddrError", "LoadStorePIFDataError", "InstrPIFAddrError", "LoadStorePIFAddrError",
-    "InstTLBMiss", "InstTLBMultiHit", "InstFetchPrivilege", "res",
-    "InstrFetchProhibited", "res", "res", "res",
-    "LoadStoreTLBMiss", "LoadStoreTLBMultihit", "LoadStorePrivilege", "res",
-    "LoadProhibited", "StoreProhibited", "res", "res",
-    "Cp0Dis", "Cp1Dis", "Cp2Dis", "Cp3Dis",
-    "Cp4Dis", "Cp5Dis", "Cp6Dis", "Cp7Dis"
-};
-
-#define NUM_EDESCS (sizeof(edesc) / sizeof(char *))
-
-void __wrap_xt_unhandled_exception(XtExcFrame *frame)
-{
-    int core_id = xPortGetCoreID();
-
-    haltOtherCore();
-    esp_dport_access_int_abort();
-    panicPutStr("DiUS Guru Meditation Error (exception): Core ");
-    panicPutDec(core_id);
-    panicPutStr(" panic'ed (");
-    int exccause = frame->exccause;
-    if (exccause < NUM_EDESCS) {
-      panicPutStr(edesc[exccause]);
-    } else {
-      panicPutStr("Unknown");
-    }
-    panicPutStr(")");
-    panicPutStr(". Exception was unhandled.\r\n");
-
-    commonErrorHandler_dump(frame,core_id);
-
-    panicPutStr("Rebooting...\r\n");
-    esp_panic_dig_reset();
-}
-
-
-void __wrap_panicHandler(XtExcFrame *frame)
-{
-    int core_id = xPortGetCoreID();
-    //Please keep in sync with PANIC_RSN_* defines
-    const char *reasons[] = {
-        "Unknown reason",
-        "Unhandled debug exception",
-        "Double exception",
-        "Unhandled kernel exception",
-        "Coprocessor exception",
-        "Interrupt wdt timeout on CPU0",
-        "Interrupt wdt timeout on CPU1",
-        "Cache disabled but cached memory region accessed",
-    };
-    const char *reason = reasons[0];
-    //The panic reason is stored in the EXCCAUSE register.
-    if (frame->exccause <= PANIC_RSN_MAX) {
-        reason = reasons[frame->exccause];
-    }
-
-    haltOtherCore();
-    esp_dport_access_int_abort();
-    panicPutStr("DiUS Guru Meditation Error (panic): Core ");
-    panicPutDec(core_id);
-    panicPutStr(" panic'ed (");
-    panicPutStr(reason);
-    panicPutStr(")\r\n");
-
-    commonErrorHandler_dump(frame,core_id);
-
-    panicPutStr("Rebooting...\r\n");
-    esp_panic_dig_reset();
-}

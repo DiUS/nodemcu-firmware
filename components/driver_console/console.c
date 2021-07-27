@@ -32,7 +32,6 @@
  */
 
 #include "driver/console.h"
-#include "esp_intr.h"
 #include "esp_intr_alloc.h"
 #include "soc/soc.h"
 #include "soc/uart_reg.h"
@@ -41,7 +40,7 @@
 #include "freertos/queue.h"
 
 #include <unistd.h>
-#include "rom/libc_stubs.h"
+#include "esp32/rom/libc_stubs.h"
 #include "sys/reent.h"
 
 #define UART_INPUT_QUEUE_SZ 0x100
@@ -132,7 +131,7 @@ static void uart0_rx_intr_handler (void *arg)
     status = READ_PERI_REG(UART_INT_ST_REG(CONSOLE_UART));
   }
   if (received && input_task)
-    task_post_low (input_task, false);
+    task_post_isr_low (input_task, false);
 }
 
 

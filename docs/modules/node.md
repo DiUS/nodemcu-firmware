@@ -26,9 +26,33 @@ The second value returned is the extended reset cause. Values are:
   - 5, wake from deep sleep
   - 6, external reset
 
+Or the internal reset code of the system can be returned as extended reset cause:
+
+  - 7: NO_MEAN                 no known reason
+  - 8: POWERON_RESET           power on reset, this includes reset button connected to power-on reset
+  - 9:
+  - 10 SW_RESET                software reset digital core caused by esp-idk firmware
+  - 11: OWDT_RESET             legacy watch dog reset digital core
+  - 12: DEEPSLEEP_RESET        Deep Sleep reset digital core
+  - 13: SDIO_RESET             Reset by SLC module, reset digital core
+  - 14: TG0WDT_SYS_RESET       Timer Group0 Watch dog reset digital core
+  - 15: TG1WDT_SYS_RESET       Timer Group1 Watch dog reset digital core
+  - 16: RTCWDT_SYS_RESET       RTC Watch dog Reset digital core
+  - 17: INTRUSION_RESET        Instrusion tested to reset CPU
+  - 18: TGWDT_CPU_RESET        Time Group reset CPU
+  - 19: SW_CPU_RESET           Software reset (from node.restart() or lua PANIC)
+  - 20: RTCWDT_CPU_RESET       RTC Watch dog Reset CPU
+  - 21: EXT_CPU_RESET          for APP CPU, reseted by PRO CPU
+  - 22: RTCWDT_BROWN_OUT_RESET Reset when the vdd voltage is not stable
+  - 23: RTCWDT_RTC_RESET       RTC Watch dog reset digital core and rtc module
+
+
 In general, the extended reset cause supercedes the raw code. The raw code is kept for backwards compatibility only. For new applications it is highly recommended to use the extended reset cause instead.
 
 In case of extended reset cause 3 (exception reset), additional values are returned containing the crash information. These are, in order, EXCCAUSE, EPC1, EPC2, EPC3, EXCVADDR, and DEPC.
+
+In case of extended reset cause 19 (SW_CPU_RESET), an additional value is returned containing the number of consecutive Lua panics. If the reset was caused by a call to node.restart() this value is 0; after the first panic the value is 1; if a panic reoccurs the value increments upto 15.
+
 
 #### Syntax
 `node.bootreason()`
@@ -88,43 +112,46 @@ dofile("hello.lc")
 
 ## node.dsleep()
 
-Enters deep sleep mode, wakes up when timed out.
+Enters deep sleep mode. When the processor wakes back up depends on the supplied `options`. Unlike light sleep, waking from deep sleep restarts the processor, therefore this API never returns. Wake up can be triggered by a time period, or when a GPIO (or GPIOs) change level, or when a touchpad event occurs. If multiple different wakeup sources are specified, the processor will wake when any of them occur. Use [`node.bootreason()`](#nodebootreason) to determine what caused the wakeup.
 
-The maximum sleep time is 4294967295us, ~71 minutes. This is an SDK limitation.
-Firmware from before 05 Jan 2016 have a maximum sleeptime of ~35 minutes.
+Only RTC GPIO pins can be used to trigger wake from deep sleep, and they should be configured as inputs prior to calling this API. On the ESP32, the RTC pins are GPIOs 0, 2, 4, 12-15, 25-27, and 32-39. An error will be raised if any of the specified pins are not RTC-capable. If multiple pins are specified and `level=1` (which is the default), the wakeup will occur if *any* of the pins are high. If `level=0` then the wakeup will only occur if *all* the specified pins are low.
 
-!!! note "Note:"
-
-    This function can only be used in the condition that esp8266 PIN32(RST) and PIN8(XPD_DCDC aka GPIO16) are connected together. Using sleep(0) will set no wake up timer, connect a GPIO to pin RST, the chip will wake up by a falling-edge on pin RST.
+For compatibility, a number parameter `usecs` can be supplied instead of an `options` table, which is equivalent to `node.dsleep({us = usecs})`.
 
 #### Syntax
-`node.dsleep(us, option)`
+`node.dsleep(usecs)` or `node.dsleep(options)`
 
 #### Parameters
- - `us` number (integer) or `nil`, sleep time in micro second. If `us == 0`, it will sleep forever. If `us == nil`, will not set sleep time.
 
- - `option` number (integer) or `nil`. If `nil`, it will use last alive setting as default option.
-	- 0, init data byte 108 is valuable
-	- \> 0, init data byte 108 is valueless
-	- 0, RF_CAL or not after deep-sleep wake up, depends on init data byte 108
-	- 1, RF_CAL after deep-sleep wake up, there will belarge current
-	- 2, no RF_CAL after deep-sleep wake up, there will only be small current
-	- 4, disable RF after deep-sleep wake up, just like modem sleep, there will be the smallest current
+- `options`, a table containing some of:
+    - `secs`, a number of seconds to sleep. This permits longer sleep periods compared to using the `us` parameter.
+    - `us`, a number of microseconds to sleep. If both `secs` and `us` are provided, the values are combined.
+    - `gpio`, a single GPIO number or a list of GPIOs. These pins must all be RTC-capable otherwise an error is raised.
+    - `level`. Whether to trigger when *any* of the GPIOs are high (`level=1`, which is the default if not specified), or when *all* the GPIOs are low (`level=0`).
+    - `isolate`. A list of GPIOs to isolate. Isolating a GPIO disables input, output, pullup, pulldown, and enables hold feature for an RTC IO. Use this option if an RTC IO needs to be disconnected from internal circuits in deep sleep, to minimize leakage current.
+    - `pull`, boolean, whether to keep powering previously-configured internal pullup/pulldown resistors. Default is `false` if not specified.
+    - `touch`, boolean, whether to trigger wakeup from any previously-configured touchpads. Default is `false` if not specified.
+
+If an empty options table is specified, ie no wakeup sources, then the chip will sleep forever with no way to wake it (except for power cycling or triggering the reset pin/button).
 
 #### Returns
-`nil`
+Does not return.
 
 #### Example
 ```lua
---do nothing
-node.dsleep()
---sleep μs
-node.dsleep(1000000)
---set sleep option, then sleep μs
-node.dsleep(1000000, 4)
---set sleep option only
-node.dsleep(nil,4)
+-- sleep 10 seconds then reboot
+node.dsleep({ secs = 10 })
+
+-- sleep until 10 seconds have elapsed or either of GPIO 13 or 15 becomes high
+node.dsleep({ secs = 10, gpio = { 13, 15 } })
+
+-- Sleep forever until GPIO 13 is low, and keep its pullup powered
+node.dsleep({ gpio = 13, level = 0, pull = true })
 ```
+
+#### See also
+- [`node.sleep()`](#nodesleep)
+
 
 ## node.flashid()
 
@@ -305,6 +332,35 @@ node.output(nil, 0)
 #### See also
 [`node.input()`](#nodeinput)
 
+## node.osoutput()
+
+Redirects the debugging output from the Espressif SDK to a callback function allowing it to be captured or processed in Lua.
+
+####Syntax
+`node.osoutput(function(str))`
+
+#### Parameters
+
+- `function(str)` a function accepts debugging output as str, and can send the output to a socket (or maybe a file). `nil` to unregister the previous function.
+
+#### Returns
+
+Nothing
+
+#### Example
+
+```lua
+function luaprint(str)
+  print("lua space: "str)
+end
+node.osoutput(luaprint)
+```
+
+```lua
+-- disable all output completely
+node.osoutput(nil)
+```
+
 ## node.readvdd33() --deprecated
 Moved to [`adc.readvdd33()`](adc/#adcreadvdd33).
 
@@ -357,6 +413,73 @@ target CPU frequency (number)
 ```lua
 node.setcpufreq(node.CPU80MHZ)
 ```
+
+
+## node.sleep()
+
+Enters light sleep mode, which saves power without losing state. The state of the CPU and peripherals is preserved during light sleep and is resumed once the processor wakes up. When the processor wakes back up depends on the supplied `options`. Wake up from light sleep can be triggered by a time period, or when a GPIO (or GPIOs) change level, when a touchpad event occurs, when data is received on a UART, or by the ULP (ultra low power processor, generally not used by NodeMCU). If multiple different wakeup sources are specified, the processor will wake when any of them occur. The return value of the function can be used to determine which source caused the wakeup. The function does not return until a wakeup occurs (and therefore may not return at all if a wakeup trigger never happens).
+
+UART buffers are not flushed on entering light sleep, rather they are suspended and resumed on wakeup, meaning that some data written before entering light sleep may not be output over the UART until after wakeup. Call [`uart.txflush()`](uart.md#uarttxflush) immediately before the `node.sleep()` call to ensure any pending data is output prior to the sleep.
+
+Timers created with `tmr` will not fire during light sleep, and the time spent sleeping is not factored in to their remaining time after wakeup. They are paused, and resumed automatically after wakeup. For example, if a timer has 2 seconds remaining when light sleep starts, it will still have 2 seconds remaining after wakeup, regardless of how much time elapsed during the sleep or what triggered the wakeup. The value returned by [`node.uptime()`](#nodeuptime) however _is_ updated by however long is spent in light sleep, and can therefore be used to calculate how much time was spent asleep.
+
+Although a time period to sleep for can be specified in microseconds, the actual amount of time spent asleep will not be that precise.
+
+Unlike with the [`dsleep()`](#nodedsleep) API, _any_ GPIO (not just the RTC-capable pins) may be used to trigger wakeup from light sleep. To configure which GPIOs should trigger wakeup, and under what circumstances, call [`gpio.wakeup()`](gpio.md#gpiowakeup) prior to calling `node.sleep()`. If a GPIO wakeup occurs, then any callbacks configured with [`gpio.trig()`](gpio.md#gpiotrig) will be called as normal after wakeup. In other words, interrupts do not get 'lost' during light sleep, and all other state such as pullups and drive strength is preserved.
+
+Similarly, if `touch = true` is specified and a touch event triggers wakeup, the touch callback will be called as normal after wakeup.
+
+Wakeup from light sleep can also be triggered by incoming data on UART0 or UART1, (but not UART2) by passing in `uart = 0` or `uart = 1` (or `uart = {0, 1}` to wake on either). Note that the byte(s) which trigger the wakeup are consumed in the process, and will therefore not be seen by the UART after wakeup. Before using uart wakeup for the first time, you must call [`uart.wakeup()`](uart.md#uartwakeup) to configure what data should trigger wakeup.
+
+WiFi and Bluetooth must be switched off before entering light sleep, otherwise an error will be thrown.
+
+#### Syntax
+`node.sleep(options)`
+
+#### Parameters
+- `options`, a table containing some of:
+    - `secs`, a number of seconds to sleep. This permits longer sleep periods compared to using the `us` parameter.
+    - `us`, a number of microseconds to sleep. If both `secs` and `us` are provided, the values are combined.
+    - `gpio`, a boolean, whether to allow wakeup by GPIOs. Default is `false` if not specified.
+    - `touch`, boolean, whether to trigger wakeup from any previously-configured touchpads. Default is `false` if not specified.
+    - `uart`, an integer or list of integers. Which UARTs should trigger wakeup. Default is the empty list if not specified.
+    - `ulp`, a boolean, whether to allow the ULP to trigger wakeup. Default is `false` if not specified.
+
+If an empty options table is specified, ie no wakeup sources, then the chip will light sleep forever with no way to wake it (except for power cycling or triggering the reset pin/button).
+
+#### Returns
+One of the following values, depending on what triggered the wakeup.
+
+- `node.wakeup.GPIO`
+- `node.wakeup.TIMER`
+- `node.wakeup.TOUCHPAD`
+- `node.wakeup.UART`
+- `node.wakeup.ULP`
+
+#### Example
+```lua
+-- sleep 10 seconds then continue
+node.sleep({ secs = 10 })
+
+-- sleep until 10 seconds have elapsed or either of GPIO 13 or 15 becomes high
+gpio.wakeup(13, gpio.INTR_HIGH)
+gpio.wakeup(15, gpio.INTR_HIGH)
+node.sleep({ secs = 10, gpio = true })
+
+-- Sleep forever until a previously-configured touchpad is touched, or a byte
+-- arrives on UART0.
+uart.wakeup(0, 3)
+wakereason = node.sleep({ touch = true, uart = 0 })
+if wakereason == node.WAKEUP_TOUCHPAD then
+    print("Woken up by touchpad!")
+end
+```
+
+#### See also
+- [`node.dsleep()`](#nodedsleep)
+- [`gpio.wakeup()`](gpio.md#gpiowakeup)
+- [`uart.wakeup()`](uart.md#uartwakeup)
+
 
 ## node.stripdebug()
 
@@ -499,4 +622,3 @@ priority is 2
 priority is 1
 priority is 0
 ```
-
