@@ -725,7 +725,7 @@ API static bool flash_fifo_prepare(uint32_t tagcount)
 }
 
 
-#if CONFIG_LUA_MODULE_S4PP
+#if CONFIG_NODEMCU_CMODULE_S4PP
 #include "s4pp.h"
 
 int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs)

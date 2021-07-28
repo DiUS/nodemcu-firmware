@@ -83,7 +83,7 @@ typedef struct s4pp_state
   uint8_t dns_shuffle_count;
 
   int64_t timestamps[3];
-#if CONFIG_LUA_MODULE_FLASHFIFO
+#if CONFIG_NODEMCU_CMODULE_FLASHFIFO
   uint32_t fifo_consumed;
   int fifo_max; // -1 = no limit
 #endif
@@ -714,7 +714,7 @@ static int ls4pp_submit(lua_State *L)
 }
 
 
-#if CONFIG_LUA_MODULE_FLASHFIFO
+#if CONFIG_NODEMCU_CMODULE_FLASHFIFO
 extern int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t idx);
 extern bool flash_fifo_drop_samples(uint32_t from_top);
 
@@ -775,7 +775,7 @@ static void on_commit(s4pp_ctx_t *ctx, bool success, unsigned num_items)
 {
   s4pp_state_t *state = (s4pp_state_t *)s4pp_user_arg(ctx);
 
-#if CONFIG_LUA_MODULE_FLASHFIFO
+#if CONFIG_NODEMCU_CMODULE_FLASHFIFO
   if (success && state->fifo_consumed)
   {
     flash_fifo_drop_samples(state->fifo_consumed);
@@ -1007,7 +1007,7 @@ static int ls4pp_sessions(lua_State *L)
 
 LROT_BEGIN(s4pp_instance)
   LROT_FUNCENTRY( on,                 ls4pp_on )
-#if CONFIG_LUA_MODULE_FLASHFIFO
+#if CONFIG_NODEMCU_CMODULE_FLASHFIFO
   LROT_FUNCENTRY( submit_flash_fifo,  ls4pp_submit_flash_fifo )
 #endif
   LROT_FUNCENTRY( submit,             ls4pp_submit )
