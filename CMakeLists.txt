@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.5)
 set(CONFIG_NVS_ENCRYPTION 1)
+set(PROJECT_VER "$ENV{PROJECT_VER}")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 project(nodemcu)
 
