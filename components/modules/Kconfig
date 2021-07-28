@@ -170,14 +170,14 @@ menu "NodeMCU modules"
             Includes the QR Code Generator from
             https://www.nayuki.io/page/qr-code-generator-library
 
-    config NODEMCU_MODULE_ROMCFG
+    config NODEMCU_CMODULE_ROMCFG
         bool "ROMcfg module"
         default "n"
         help
              Includes the romcfg module.
              Needs a partition of type 0xC1, subtype 0x01 of size 4096.
 
-    config NODEMCU_MODULE_S4PP
+    config NODEMCU_CMODULE_S4PP
         bool "S4PP module"
         default "n"
         help

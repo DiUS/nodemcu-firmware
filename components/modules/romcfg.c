@@ -264,6 +264,6 @@ LROT_BEGIN(romcfg)
   LROT_FUNCENTRY( integer_read,    romcfg_integer_read )
   LROT_FUNCENTRY( integer_empty,   romcfg_integer_empty )
   LROT_FUNCENTRY( is_empty,romcfg_is_empty )
-LROT_END(s4pp, NULL, 0)
+LROT_END(romcfg, NULL, 0)
 
 NODEMCU_MODULE(ROMCFG, "romcfg", romcfg, NULL);
