@@ -187,7 +187,7 @@ static void scanProtoStrings(lua_State *L, const Proto* f, int strip) {
     addTS(L, f->source);
 
 #ifdef LUA_OPTIMIZE_DEBUG
-  if (f->packedlineinfo && !strip)
+  if (f->packedlineinfo && strip<3)
     addTS(L, luaS_new(L, cast(const char *, f->packedlineinfo)));
 #endif
 
