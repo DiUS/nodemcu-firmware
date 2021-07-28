@@ -185,7 +185,7 @@ void __attribute__((noreturn)) app_main(void)
 
   nodemcu_init ();
 
-  nvs_flash_init ();
+  nvs_flash_init_partition(NVS_DEFAULT_PART_NAME);
   esp_netif_init ();
 
   start_lua ();
