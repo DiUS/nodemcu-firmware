@@ -39,3 +39,5 @@ CONFIG_TCP_MSL=5000
 # Disable esp-idf's bluetooth component by default.
 # The bthci module is also disabled and will enable bt when selected
 CONFIG_BT_ENABLED=n
+
+CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS=y
