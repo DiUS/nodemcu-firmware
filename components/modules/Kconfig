@@ -115,6 +115,7 @@ menu "NodeMCU modules"
     config NODEMCU_CMODULE_NODE
         bool "Node module"
         default "y"
+        select FREERTOS_GENERATE_RUN_TIME_STATS
         help
             Includes the node module (recommended).
 
