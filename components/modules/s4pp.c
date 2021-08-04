@@ -263,6 +263,13 @@ static void free_connection(s4pp_conn_t *conn)
 
   if (conn->netconn)
   {
+    if (netconn_close(conn->netconn) != ERR_OK)
+    {
+      // We *have* to ensure the TCP connection is closed before we can
+      // call netconn_delete() or we'll hit an assert
+      tcp_abort(conn->netconn->pcb.tcp);
+      conn->netconn->pcb.tcp = NULL;
+    }
     netconn_delete(conn->netconn);
     conn->netconn = NULL;
   }
