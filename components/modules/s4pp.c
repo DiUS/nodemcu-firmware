@@ -41,6 +41,8 @@
 #include <string.h>
 #include <lwip/ip.h>
 #include <lwip/tcp.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/timers.h>
 
 #define S4PP_TABLE_INSTANCE "s4pp.instance"
 // Reserved for reporting simple DNS failures, in case we stop implementing iterative in here and punt it to LUA
@@ -55,6 +57,7 @@
 typedef struct s4pp_conn {
   ip_addr_t resolved_ip;
   uint16_t port;
+  int16_t timeout_s;
   struct netconn *netconn;
   unsigned left_to_send;
   struct s4pp_conn *next;
@@ -134,8 +137,9 @@ static s4pp_conn_t *active_conns;
 
 static task_handle_t s4pp_task;
 static task_handle_t conn_task;
+static task_handle_t timeout_task;
 
-
+static TimerHandle_t timeout_timer;
 
 // --- forward decls ------------------------------------------------
 
@@ -275,6 +279,13 @@ static void free_connection(s4pp_conn_t *conn)
   free(conn);
 }
 
+// --- RTOS timer handler --------------------------------------------
+
+void timeout_tick(TimerHandle_t timer)
+{
+  (void)timer;
+  task_post_medium(timeout_task, (task_param_t)NULL);
+}
 
 
 // --- lwIP RTOS task handlers -----------------------------------------
@@ -426,6 +437,8 @@ static void handle_conn(task_param_t param, task_prio_t prio)
       err_t res = netconn_recv(conn->netconn, &nb);
       if (res != ERR_OK || !nb)
         goto_network_err;
+      if (conn->timeout_s >= 0)
+        conn->timeout_s = -1; // we received something, so not on a broken proxy
       netbuf_first(nb);
       do {
         void *payload;
@@ -483,6 +496,28 @@ done:
 }
 
 
+static void handle_timeout_tick(task_param_t param, task_prio_t prio)
+{
+  (void)param; (void)prio;
+  bool active = false;
+  for (s4pp_state_t *i = active_s4pps; i; i = i->next)
+  {
+    if (i->conn && i->conn->timeout_s > 0)
+    {
+      if (--i->conn->timeout_s == 0)
+      {
+        report_error(lua_getstate(), i, S4PP_NETWORK_ERROR);
+        free_connection(i->conn);
+        i->conn = NULL;
+      }
+      else
+        active = true;
+    }
+  }
+  if (!active)
+    xTimerStop(timeout_timer, portMAX_DELAY);
+}
+
 
 // --- s4pp I/Os -----------------------------------------------------
 
@@ -493,6 +528,8 @@ static s4pp_conn_t *io_connect(const s4pp_server_t *server)
     return NULL;
 
   conn->port = server->port;
+  conn->timeout_s = 20;
+  xTimerStart(timeout_timer, portMAX_DELAY);
 
   if (server->state->conn)
   {
@@ -806,6 +843,9 @@ static int ls4pp_commit(lua_State *L)
   if (!state_is_active(sud->state) || !sud->state->ctx)
     return luaL_error(L, "s4pp commit after close");
 
+  sud->state->conn->timeout_s = 20;
+  xTimerStart(timeout_timer, portMAX_DELAY);
+
   s4pp_flush(sud->state->ctx);
 
   return 0;
@@ -1031,6 +1071,10 @@ static int luaopen_s4pp(lua_State *L)
 
   s4pp_task = task_get_id(s4pp_handle_event);
   conn_task = task_get_id(handle_conn);
+  timeout_task = task_get_id(handle_timeout_tick);
+
+  timeout_timer = xTimerCreate(
+    "s4pp-timeout", pdMS_TO_TICKS(1000), pdTRUE, NULL, timeout_tick);
 
   return 0;
 }
