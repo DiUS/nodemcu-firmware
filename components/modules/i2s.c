@@ -55,7 +55,7 @@ static void i2s_tx_task( task_param_t param, task_prio_t prio ) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, is->cb);
     lua_pushinteger( L, i2s_id );
     lua_pushstring( L, "tx" );
-    lua_call( L, 2, 0 );
+    luaL_pcallx( L, 2, 0 );
   }
 }
 
@@ -68,7 +68,7 @@ static void i2s_rx_task( task_param_t param, task_prio_t prio ) {
     lua_rawgeti(L, LUA_REGISTRYINDEX, is->cb);
     lua_pushinteger( L, i2s_id );
     lua_pushstring( L, "rx" );
-    lua_call( L, 2, 0 );
+    luaL_pcallx( L, 2, 0 );
   }
 }
 
@@ -134,7 +134,7 @@ static int node_i2s_start( lua_State *L )
 
   int top = lua_gettop( L );
 
-  luaL_checkanytable (L, 2);
+  luaL_checktable (L, 2);
 
   i2s_config_t i2s_config;
   memset( &i2s_config, 0, sizeof( i2s_config ) );
@@ -309,7 +309,7 @@ static int node_i2s_mute( lua_State *L )
 
 
 // Module function map
-LROT_BEGIN(i2s)
+LROT_BEGIN(i2s, NULL, 0)
   LROT_FUNCENTRY( start, node_i2s_start )
   LROT_FUNCENTRY( stop,  node_i2s_stop )
   LROT_FUNCENTRY( read,  node_i2s_read )

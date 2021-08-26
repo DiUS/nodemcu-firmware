@@ -22,6 +22,7 @@ menu "NodeMCU modules"
             Includes the simple BlueTooth HCI module.
 
     config NODEMCU_CMODULE_CAN
+        depends on CONFIG_IDF_TARGET_ESP32
         bool "CAN module"
         default "n"
         help
@@ -34,6 +35,7 @@ menu "NodeMCU modules"
             Includes the crypto module.
 
     config NODEMCU_CMODULE_DAC
+        depends on IDF_TARGET_ESP32 || IDF_TARGET_ESP32S2
         bool "DAC module"
         default "n"
         help
@@ -53,6 +55,8 @@ menu "NodeMCU modules"
             and decoding functionality.
 
     config NODEMCU_CMODULE_ETH
+        depends on IDF_TARGET_ESP32
+        select ETH_USE_ESP32_EMAC
         bool "Ethernet module"
         default "n"
         help
@@ -89,6 +93,7 @@ menu "NodeMCU modules"
             Includes the I2C module (recommended).
 
     config NODEMCU_CMODULE_I2S
+        depends on IDF_TARGET_ESP32
         bool "I2S module"
         default "n"
         help
@@ -150,6 +155,12 @@ menu "NodeMCU modules"
             requires a partition table with at least two OTA partitions, plus
             the OTA data partition. See the IDF documentation for details.
 
+    config NODEMCU_CMODULE_PIPE
+        bool "Pipe module"
+        default "y"
+        help
+            Includes the pipe module (required by our Lua VM).
+
     config NODEMCU_CMODULE_PLUG_LEDS
         bool "Plug Leds module"
         default "n"
@@ -158,6 +169,7 @@ menu "NodeMCU modules"
             leds on DiUS power monitor plugs.
 
     config NODEMCU_CMODULE_PULSECNT
+        depends on IDF_TARGET_ESP32
         bool "Pulse counter module"
         default "n"
         help
@@ -185,6 +197,7 @@ menu "NodeMCU modules"
             Includes the S4PP module.
 
     config NODEMCU_CMODULE_SDMMC
+        depends on IDF_TARGET_ESP32
         bool "SD-MMC module"
         default "n"
         help
@@ -229,6 +242,7 @@ menu "NodeMCU modules"
             Includes the timer module (recommended).
 
     config NODEMCU_CMODULE_TOUCH
+        depends on IDF_TARGET_ESP32
         bool "Touch module"
         default "n"
         help
@@ -269,5 +283,11 @@ menu "NodeMCU modules"
         default "n"
         help
             Includes the time module.
+
+    config NODEMCU_CMODULE_UART
+        bool "UART module"
+        default y
+        help
+            Includes the UART module (required by our Lua VM).
 
 endmenu

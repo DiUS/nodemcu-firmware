@@ -101,12 +101,7 @@ typedef struct {
   int16_t end_char;
 } uart_status_t;
 
-typedef struct {
-  unsigned id;
-  int type;
-  size_t size;
-  char* data;
-} uart_event_post_t;
+extern uart_status_t uart_status[NUM_UART];
 
 // Flow control types (this is a bit mask, one can specify PLATFORM_UART_FLOW_RTS | PLATFORM_UART_FLOW_CTS )
 #define PLATFORM_UART_FLOW_NONE               0
@@ -123,6 +118,7 @@ void platform_uart_flush( unsigned id );
 int platform_uart_start( unsigned id );
 void platform_uart_stop( unsigned id );
 int platform_uart_get_config(unsigned id, uint32_t *baudp, uint32_t *databitsp, uint32_t *parityp, uint32_t *stopbitsp);
+int platform_uart_set_wakeup_threshold(unsigned id, unsigned threshold);
 
 
 // *****************************************************************************
@@ -270,14 +266,6 @@ typedef struct {
  */
 bool platform_partition_info (uint8_t idx, platform_partition_t *info);
 
-/**
- * Appends a partition entry to the partition table, if possible.
- * Intended for auto-creation of a SPIFFS partition.
- * @param info The partition definition to append.
- * @returns True if the partition could be added, false if not.
- */
-bool platform_partition_add (const platform_partition_t *info);
-
 
 // *****************************************************************************
 // Helper macros
@@ -296,5 +284,7 @@ bool platform_partition_add (const platform_partition_t *info);
     return luaL_error( L, #resmod" %d not valid with " #mod " %d", ( unsigned )resid, ( unsigned )id )
 
 
+
+void platform_print_deprecation_note( const char *msg, const char *time_frame);
 
 #endif

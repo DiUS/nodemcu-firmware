@@ -10,9 +10,11 @@
 
 #include "lauxlib.h"
 
-/* FIXME: Assume size_t is an unsigned lua_Integer */
-typedef size_t lua_UInteger;
-#define LUA_UINTEGER_MAX SIZE_MAX
+#if defined(LUA_UNSIGNED)
+typedef LUA_UNSIGNED lua_UInteger;
+#else
+typedef unsigned LUA_INTEGER lua_UInteger;
+#endif
 
 /* Define TOBIT to get a bit value */
 #define TOBIT(L, n)                    \
@@ -119,7 +121,7 @@ static int bit_clear( lua_State* L )
   return 1; 
 }
 
-LROT_BEGIN(bit)
+LROT_BEGIN(bit, NULL, 0)
   LROT_FUNCENTRY( bnot,    bit_bnot )
   LROT_FUNCENTRY( band,    bit_band )
   LROT_FUNCENTRY( bor,     bit_bor )

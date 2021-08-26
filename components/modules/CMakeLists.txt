@@ -1,21 +1,75 @@
-# Globbing isn't recommended, but I dislike it less than having to edit
-# this file whenever a new module source file springs into existence.
-# Just remember to "idf.py reconfigure" (or do a clean build) to get
-# cmake to pick up on the new (or removed) files.
-file(
-  GLOB module_srcs
-  LIST_DIRECTORIES false
-  RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}
-  *.c
+# Modules common to all chips
+set(module_srcs
+  "adc.c"
+  "bit.c"
+  "bthci.c"
+  "common.c"
+  "crypto.c"
+  "dht.c"
+  "encoder.c"
+  "file.c"
+  "gpio.c"
+  "http.c"
+  "i2c.c"
+  "i2c_hw_master.c"
+  "i2c_hw_slave.c"
+  "ledc.c"
+  "mqtt.c"
+  "net.c"
+  "node.c"
+  "otaupgrade.c"
+  "ow.c"
+  "pipe.c"
+  "qrcodegen.c"
+  "sigma_delta.c"
+  "sjson.c"
+  "sodium.c"
+  "spi.c"
+  "spi_master.c"
+  "struct.c"
+  "time.c"
+  "tmr.c"
+  "u8g2.c"
+  "uart.c"
+  "ucg.c"
+  "wifi.c"
+  "wifi_ap.c"
+  "wifi_common.c"
+  "wifi_sta.c"
+  "ws2812.c"
 )
 
 if(CONFIG_NODEMCU_CMODULE_NRFBOOT)
   list(APPEND embed_files "${BUILD_DIR}/nrf.bin")
 endif()
 
+# Chip specific modules, per module.
+# List source files for each applicable chip.
+if(IDF_TARGET STREQUAL "esp32")
+  list(APPEND module_srcs
+    "can.c"
+    "dac.c"
+    "eth.c"
+    "i2s.c"
+    "pulsecnt.c"
+    "sdmmc.c"
+    "touch.c"
+  )
+elseif(IDF_TARGET STREQUAL "esp32s2")
+  list(APPEND module_srcs
+    "dac.c"
+  )
+elseif(IDF_TARGET STREQUAL "esp32s3")
+  list(APPEND module_srcs
+  )
+elseif(IDF_TARGET STREQUAL "esp32c3")
+  list(APPEND module_srcs
+  )
+endif()
+
 idf_component_register(
   SRCS ${module_srcs}
-  PRIV_INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
+  INCLUDE_DIRS "." "${CMAKE_CURRENT_BINARY_DIR}"
   PRIV_REQUIRES
     "app_update"
     "base_nodemcu"
@@ -47,7 +101,6 @@ foreach(module_src ${module_srcs})
   string(REPLACE ".c" "" module_name ${module_src})
   string(TOUPPER ${module_name} module_ucase)
   set(mod_opt "CONFIG_NODEMCU_CMODULE_${module_ucase}")
-  #message("checking ${mod_opt}")
   if (${${mod_opt}})
     list(APPEND modules_enabled ${module_ucase})
   endif()

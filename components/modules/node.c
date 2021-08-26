@@ -1,7 +1,6 @@
 #include "module.h"
 #include "lauxlib.h"
 #include "common.h"
-#include "legc.h"
 #include "lundump.h"
 #include "platform.h"
 #include "task/task.h"
@@ -14,78 +13,137 @@
 #include "ldebug.h"
 #include "esp_vfs.h"
 #include "lnodeaux.h"
-#include "lflash.h"
+#include "lpanic.h"
 #include "rom/rtc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/timers.h"
+
+static void restart_callback(TimerHandle_t timer) {
+  (void)timer;
+  esp_restart();
+}
+
+static int default_onerror(lua_State *L) {
+  /* Use Lua print to print the ToS */
+  lua_settop(L, 1);
+  lua_getglobal(L, "print");
+  lua_insert(L, 1);
+  lua_pcall(L, 1, 0, 0);
+  /* One first time through set automatic restart after 2s delay */
+  static TimerHandle_t restart_timer;
+  if (!restart_timer) {
+    restart_timer = xTimerCreate(
+        "error_restart", pdMS_TO_TICKS(2000), pdFALSE, NULL, restart_callback);
+    if (xTimerStart(restart_timer, portMAX_DELAY) != pdPASS)
+      esp_restart(); // should never happen, but Justin Case fallback
+  }
+  return 0;
+}
+
+// Lua: setonerror([function])
+static int node_setonerror( lua_State* L ) {
+  lua_settop(L, 1);
+  if (!lua_isfunction(L, 1)) {
+    lua_pop(L, 1);
+    lua_pushcfunction(L, default_onerror);
+  }
+  lua_setfield(L, LUA_REGISTRYINDEX, "onerror");
+  return 0;
+}
+
 
 // Lua: node.bootreason()
 static int node_bootreason( lua_State *L)
 {
-	int panicval = panic_get_nvval();
-	RESET_REASON rr0 = rtc_get_reset_reason(0);
-	unsigned rawinfo = 3;
-	// rawinfo can take these values as defined in docs/modules/node.md
-	//
-	// 1, power-on
-	// 2, reset (software?)
-	// 3, hardware reset via reset pin or unknown reason
-	// 4, WDT reset (watchdog timeout)
-	//
-	// extendedinfo can take these values as definded in docs/modules/node.md
-	//
-	// 0, power-on
-	// 1, hardware watchdog reset
-	// 2, exception reset
-	// 3, software watchdog reset
-	// 4, software restart
-	// 5, wake from deep sleep
-	// 6, external reset
-	// added values from rom/rtc.h with offset 7
-        // 7: NO_MEAN                =  0,
-        // 8: POWERON_RESET          =  1,    /**<1, Vbat power on reset*/
-	// 9: 
-        // 10: SW_RESET               =  3,    /**<3, Software reset digital core*/
-        // 11: OWDT_RESET             =  4,    /**<4, Legacy watch dog reset digital core*/
-        // 12: DEEPSLEEP_RESET        =  5,    /**<3, Deep Sleep reset digital core*/
-        // 13: SDIO_RESET             =  6,    /**<6, Reset by SLC module, reset digital core*/
-        // 14: TG0WDT_SYS_RESET       =  7,    /**<7, Timer Group0 Watch dog reset digital core*/
-        // 15: TG1WDT_SYS_RESET       =  8,    /**<8, Timer Group1 Watch dog reset digital core*/
-        // 16: RTCWDT_SYS_RESET       =  9,    /**<9, RTC Watch dog Reset digital core*/
-        // 17: INTRUSION_RESET        = 10,    /**<10, Instrusion tested to reset CPU*/
-        // 18: TGWDT_CPU_RESET        = 11,    /**<11, Time Group reset CPU*/
-        // 19: SW_CPU_RESET           = 12,    /**<12, Software reset CPU*/
-        // 20: RTCWDT_CPU_RESET       = 13,    /**<13, RTC Watch dog Reset CPU*/
-        // 21: EXT_CPU_RESET          = 14,    /**<14, for APP CPU, reseted by PRO CPU*/
-        // 22: RTCWDT_BROWN_OUT_RESET = 15,    /**<15, Reset when the vdd voltage is not stable*/
-        // 23: RTCWDT_RTC_RESET       = 16     /**<16, RTC Watch dog reset digital core and rtc module*/`
-	switch (rr0) {
-		case NO_MEAN:   	rawinfo = 3; break;
-		case POWERON_RESET: 	rawinfo = 1; break;
-		case SW_RESET:		rawinfo = 2; break;
-		case OWDT_RESET:	rawinfo = 4; break;
-		case DEEPSLEEP_RESET:
-		case SDIO_RESET:
-		case TG0WDT_SYS_RESET:
-		case TG1WDT_SYS_RESET:
-					rawinfo = 3; break;
-		case RTCWDT_SYS_RESET:	rawinfo = 4; break;
-		case INTRUSION_RESET:	rawinfo = 3; break;
-		case TGWDT_CPU_RESET:	rawinfo = 4; break;
-		case SW_CPU_RESET:	rawinfo = 2; break;
-		case RTCWDT_CPU_RESET:	rawinfo = 4; break;
-		case EXT_CPU_RESET:
-		case RTCWDT_BROWN_OUT_RESET:	rawinfo = 3; break;
-		case RTCWDT_RTC_RESET:	rawinfo = 3; break;
-	}
-	lua_pushinteger(L, (lua_Integer)rawinfo);
-	lua_pushinteger(L, (lua_Integer)rr0+7);
-	if (rr0 == SW_CPU_RESET) {
-		lua_pushinteger(L, (lua_Integer)panicval);
-		return 3;
-	}
-	return 2;
+  int panicval = panic_get_nvval();
+  RESET_REASON rr0 = rtc_get_reset_reason(0);
+  unsigned rawinfo = 3;
+  // rawinfo can take these values as defined in docs/modules/node.md
+  //
+  // 1, power-on
+  // 2, reset (software?)
+  // 3, hardware reset via reset pin or unknown reason
+  // 4, WDT reset (watchdog timeout)
+  //
+  // extendedinfo can take these values as definded in docs/modules/node.md
+  //
+  // 0, power-on
+  // 1, hardware watchdog reset
+  // 2, exception reset
+  // 3, software watchdog reset
+  // 4, software restart
+  // 5, wake from deep sleep
+  // 6, external reset
+  // added values from rom/rtc.h with offset 7
+  // 7: NO_MEAN                =  0,
+  // 8: POWERON_RESET          =  1,    /**<1, Vbat power on reset*/
+  // 9:
+  // 10: SW_RESET               =  3,    /**<3, Software reset digital core*/
+  // 11: OWDT_RESET             =  4,    /**<4, Legacy watch dog reset digital core*/
+  // 12: DEEPSLEEP_RESET        =  5,    /**<3, Deep Sleep reset digital core*/
+  // 13: SDIO_RESET             =  6,    /**<6, Reset by SLC module, reset digital core*/
+  // 14: TG0WDT_SYS_RESET       =  7,    /**<7, Timer Group0 Watch dog reset digital core*/
+  // 15: TG1WDT_SYS_RESET       =  8,    /**<8, Timer Group1 Watch dog reset digital core*/
+  // 16: RTCWDT_SYS_RESET       =  9,    /**<9, RTC Watch dog Reset digital core*/
+  // 17: INTRUSION_RESET        = 10,    /**<10, Instrusion tested to reset CPU*/
+  // 18: TGWDT_CPU_RESET        = 11,    /**<11, Time Group reset CPU*/
+  // 19: SW_CPU_RESET           = 12,    /**<12, Software reset CPU*/
+  // 20: RTCWDT_CPU_RESET       = 13,    /**<13, RTC Watch dog Reset CPU*/
+  // 21: EXT_CPU_RESET          = 14,    /**<14, for APP CPU, reseted by PRO CPU*/
+  // 22: RTCWDT_BROWN_OUT_RESET = 15,    /**<15, Reset when the vdd voltage is not stable*/
+  // 23: RTCWDT_RTC_RESET       = 16     /**<16, RTC Watch dog reset digital core and rtc module*/`
+#if !defined(CONFIG_IDF_TARGET_ESP32)
+# define SW_CPU_RESET   RTC_SW_CPU_RESET
+# define SW_RESET       RTC_SW_SYS_RESET
+#endif
+  switch (rr0) {
+    case POWERON_RESET:
+      rawinfo = 1; break;
+    case SW_CPU_RESET:
+    case SW_RESET:
+      rawinfo = 2; break;
+    case NO_MEAN:
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    case EXT_CPU_RESET:
+#endif
+    case DEEPSLEEP_RESET:
+#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32C3)
+    case SDIO_RESET:
+#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S2) || defined(CONFIG_IDF_TARGET_ESP32S3)
+    case GLITCH_RTC_RESET:
+#endif
+#if defined(CONFIG_IDF_TARGET_ESP32S3)
+    case EFUSE_RESET:
+#endif
+    case TG0WDT_SYS_RESET:
+    case TG1WDT_SYS_RESET:
+    case INTRUSION_RESET:
+    case RTCWDT_BROWN_OUT_RESET:
+    case RTCWDT_RTC_RESET:
+      rawinfo = 3; break;
+#if defined(CONFIG_IDF_TARGET_ESP32)
+    case OWDT_RESET:
+    case TGWDT_CPU_RESET:
+#else
+    case TG0WDT_CPU_RESET:
+    case TG1WDT_CPU_RESET:
+    case SUPER_WDT_RESET:
+#endif
+    case RTCWDT_CPU_RESET:
+    case RTCWDT_SYS_RESET:
+      rawinfo = 4; break;
+  }
+  lua_pushinteger(L, (lua_Integer)rawinfo);
+  lua_pushinteger(L, (lua_Integer)rr0+7);
+  if (rr0 == SW_CPU_RESET) {
+    lua_pushinteger(L, (lua_Integer)panicval);
+    return 3;
+  }
+  return 2;
 }
 
-
+#if defined(CONFIG_IDF_TARGET_ESP32)
 // Lua: node.chipid()
 static int node_chipid( lua_State *L )
 {
@@ -102,7 +160,7 @@ static int node_chipid( lua_State *L )
   lua_pushstring(L, chipid);
   return 1;
 }
-
+#endif
 
 // Lua: node.heap()
 static int node_heap( lua_State* L )
@@ -154,7 +212,7 @@ static void node_sleep_disable_wakeup_sources (lua_State *L)
 static int node_sleep (lua_State *L)
 {
   lua_settop(L, 1);
-  luaL_checkanytable(L, 1);
+  luaL_checktable(L, 1);
   node_sleep_disable_wakeup_sources(L);
 
   // uart options: uart = num|{num, num, ...}
@@ -201,6 +259,7 @@ static int node_sleep (lua_State *L)
     esp_sleep_enable_timer_wakeup(usecs);
   }
 
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
   // touch option: boolean
   if (opt_checkbool(L, "touch", false)) {
     int err = esp_sleep_enable_touchpad_wakeup();
@@ -216,6 +275,7 @@ static int node_sleep (lua_State *L)
       return luaL_error(L, "Error %d returned from esp_sleep_enable_ulp_wakeup()", err);
     }
   }
+#endif
 
   int err = esp_light_sleep_start();
   if (err == ESP_ERR_INVALID_STATE) {
@@ -272,10 +332,8 @@ static int node_dsleep (lua_State *L)
       }
     }
 
-    int level = opt_checkint_range(L, "level", 1, 0, 1);
+#if !defined(CONFIG_IDF_TARGET_ESP32C3)
     bool pull = opt_checkbool(L, "pull", false);
-    bool touch = opt_checkbool(L, "touch", false);
-
     if (opt_get(L, "isolate", LUA_TTABLE)) {
       for (int i = 1; ; i++) {
         lua_rawgeti(L, -1, i);
@@ -298,6 +356,7 @@ static int node_dsleep (lua_State *L)
         esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON);
     }
 
+    int level = opt_checkint_range(L, "level", 1, 0, 1);
     if (pin_mask) {
       esp_sleep_ext1_wakeup_mode_t mode = (level == 1) ?
         ESP_EXT1_WAKEUP_ANY_HIGH : ESP_EXT1_WAKEUP_ALL_LOW;
@@ -307,9 +366,11 @@ static int node_dsleep (lua_State *L)
       }
     }
 
+    bool touch = opt_checkbool(L, "touch", false);
     if (touch) {
       esp_sleep_enable_touchpad_wakeup();
     }
+#endif
 
   } else {
     luaL_argerror(L, 1, "Expected integer or table");
@@ -324,24 +385,13 @@ static int node_dsleep (lua_State *L)
 }
 
 
-extern lua_Load gLoad;
-extern bool user_process_input(bool force);
 // Lua: input("string")
 static int node_input( lua_State* L )
 {
   size_t l = 0;
   const char *s = luaL_checklstring(L, 1, &l);
-  if (s != NULL && l > 0 && l < LUA_MAXINPUT - 1)
-  {
-    lua_Load *load = &gLoad;
-    if (load->line_position == 0) {
-      memcpy(load->line, s, l);
-      load->line[l + 1] = '\0';
-      load->line_position = strlen(load->line) + 1;
-      load->done = 1;
-      user_process_input(true);
-    }
-  }
+  if (l > 0 && l < LUA_MAXINPUT - 1)
+    lua_input_string(s, l);
   return 0;
 }
 
@@ -365,7 +415,7 @@ ssize_t redir_write(int fd, const void *data, size_t size) {
         lua_State *L = lua_getstate();
         lua_rawgeti(L, LUA_REGISTRYINDEX, output_redir);  // push function reference
         lua_pushlstring(L, (char *)data, size);           // push data
-        lua_pcall(L, 1, 0, 0);                            // invoke callback
+        luaL_pcallx(L, 1, 0);                            // invoke callback
     }
     return size;
 }
@@ -377,7 +427,7 @@ int redir_open(const char *path, int flags, int mode) {
 
 // Lua: node.output(func, serial_debug)
 static int node_output(lua_State *L) {
-    if (lua_type(L, 1) == LUA_TFUNCTION || lua_type(L, 1) == LUA_TLIGHTFUNCTION) {
+    if (lua_isfunction(L, 1)) {
         if (output_redir == LUA_NOREF) {
             // create an instance of a virtual filesystem so we can use fopen
             esp_vfs_t redir_fs = {
@@ -433,7 +483,7 @@ int redir_vprintf(const char *fmt, va_list ap)
         lua_State *L = lua_getstate();
         lua_rawgeti(L, LUA_REGISTRYINDEX, os_output_redir);  // push function reference
         lua_pushlstring(L, (char *)data, size);           // push data
-        lua_pcall(L, 1, 0, 0);                            // invoke callback
+        luaL_pcallx(L, 1, 0);                            // invoke callback
     }
     return size;
 }
@@ -441,7 +491,7 @@ int redir_vprintf(const char *fmt, va_list ap)
 
 // Lua: node.output(func, serial_debug)
 static int node_osoutput(lua_State *L) {
-    if (lua_type(L, 1) == LUA_TFUNCTION || lua_type(L, 1) == LUA_TLIGHTFUNCTION) {
+    if (lua_isfunction(L, 1)) {
         if (os_output_redir == LUA_NOREF) {
             // register our log redirect first time this is invoked
             oldvprintf = esp_log_set_vprintf(redir_vprintf);
@@ -459,6 +509,7 @@ static int node_osoutput(lua_State *L) {
     return 0;
 }
 
+
 /* node.stripdebug([level[, function]]). 
  * level:    1 don't discard debug
  *           2 discard Local and Upvalue debug info
@@ -469,58 +520,38 @@ static int node_osoutput(lua_State *L) {
  * The function returns an estimated integer count of the bytes stripped.
  */
 static int node_stripdebug (lua_State *L) {
-  int level;
 
-  if (L->top == L->base) {
-    lua_pushlightuserdata(L, &luaG_stripdebug );
-    lua_gettable(L, LUA_REGISTRYINDEX);
-    if (lua_isnil(L, -1)) {
-      lua_pop(L, 1);
-      lua_pushinteger(L, CONFIG_LUA_OPTIMIZE_DEBUG);
-    }
-    return 1;
+  int n = lua_gettop(L);
+  int strip = 0;
+
+  lua_settop(L, 2);
+  if (!lua_isnil(L, 1)) {
+    strip = lua_tointeger(L, 1);
+    luaL_argcheck(L, strip > 0 && strip < 4, 1, "Invalid strip level");
   }
 
-  level = luaL_checkint(L, 1);
-  if ((level <= 0) || (level > 3)) luaL_argerror(L, 1, "must in range 1-3");
-
-  if (L->top == L->base + 1) {
-    /* Store the default level in the registry if no function parameter */
-    lua_pushlightuserdata(L, &luaG_stripdebug);
-    lua_pushinteger(L, level);
-    lua_settable(L, LUA_REGISTRYINDEX);
-    lua_settop(L,0);
-    return 0;
-  }
-
-  if (level == 1) {
-    lua_settop(L,0);
-    lua_pushinteger(L, 0);
-    return 1;
-  }
-
-  if (!lua_isfunction(L, 2)) {
-    int scope = luaL_checkint(L, 2);
+  if (lua_isnumber(L, 2)) {
+    /* Use debug interface to replace stack level by corresponding function */
+    int scope = luaL_checkinteger(L, 2);
     if (scope > 0) {
-      /* if the function parameter is a +ve integer then climb to find function */
       lua_Debug ar;
-      lua_pop(L, 1); /* pop level as getinfo will replace it by the function */
+      lua_pop(L, 1);
       if (lua_getstack(L, scope, &ar)) {
-        lua_getinfo(L, "f", &ar);
+        lua_getinfo(L, "f", &ar);  /* put function at [2] (ToS) */
       }
     }
   }
 
-  if(!lua_isfunction(L, 2) || lua_iscfunction(L, -1)) luaL_argerror(L, 2, "must be a Lua Function");
-  // lua_lock(L);
-  Proto *f = clvalue(L->base + 1)->l.p;
-  // lua_unlock(L);
-  lua_settop(L,0);
-  lua_pushinteger(L, luaG_stripdebug(L, f, level, 1));
+  int isfunc = lua_isfunction(L, 2);
+  luaL_argcheck(L, n < 2 || isfunc, 2, "not a valid function");
+
+  /* return result of lua_stripdebug, adding 1 if this is get/set level) */
+  lua_pushinteger(L, lua_stripdebug(L, strip - 1) + (isfunc ? 0 : 1));
   return 1;
 }
 
 
+#if defined(CONFIG_LUA_VERSION_51)
 // Lua: node.egc.setmode( mode, [param])
 // where the mode is one of the node.egc constants  NOT_ACTIVE , ON_ALLOC_FAILURE,
 // ON_MEM_LIMIT, ALWAYS.  In the case of ON_MEM_LIMIT an integer parameter is reqired
@@ -532,9 +563,10 @@ static int node_egc_setmode(lua_State* L) {
   luaL_argcheck(L, mode <= (EGC_ON_ALLOC_FAILURE | EGC_ON_MEM_LIMIT | EGC_ALWAYS), 1, "invalid mode");
   luaL_argcheck(L, !(mode & EGC_ON_MEM_LIMIT) || limit>0, 1, "limit must be non-zero");
 
-  legc_set_mode( L, mode, limit );
+  lua_setegcmode( L, mode, limit );
   return 0;
 }
+#endif
 
 
 static int writer(lua_State* L, const void* p, size_t size, void* u)
@@ -575,7 +607,7 @@ static int node_compile( lua_State* L )
   output[strlen(output) - 1] = '\0';
   NODE_DBG(output);
   NODE_DBG("\n");
-  if (luaL_loadfsfile(L, fname) != 0) {
+  if (luaL_loadfile(L, fname) != 0) {
     luaM_free( L, output );
     return luaL_error(L, lua_tostring(L, -1));
   }
@@ -625,7 +657,7 @@ static void do_node_task (task_param_t task_fn_ref, task_prio_t prio)
   lua_rawgeti(L, LUA_REGISTRYINDEX, (int)task_fn_ref);
   luaL_unref(L, LUA_REGISTRYINDEX, (int)task_fn_ref);
   lua_pushinteger(L, prio);
-  lua_call(L, 1, 0);
+  luaL_pcallx(L, 1, 0);
 }
 
 // Lua: node.task.post([priority],task_cb) -- schedule a task for execution next
@@ -638,7 +670,7 @@ static int node_task_post( lua_State* L )
     luaL_argcheck(L, priority <= TASK_PRIORITY_HIGH, 1, "invalid  priority");
     Ltype = lua_type(L, ++n);
   }
-  luaL_argcheck(L, Ltype == LUA_TFUNCTION || Ltype == LUA_TLIGHTFUNCTION, n, "invalid function");
+  luaL_argcheck(L, Ltype == LUA_TFUNCTION, n, "invalid function");
   lua_pushvalue(L, n);
 
   int task_fn_ref = luaL_ref(L, LUA_REGISTRYINDEX);
@@ -680,7 +712,6 @@ static int node_uptime(lua_State *L)
   return 2;
 }
 
-
 static int node_cpuload(lua_State *L)
 {
   char answer[1024];
@@ -690,16 +721,102 @@ static int node_cpuload(lua_State *L)
 }
 
 
-LROT_BEGIN(node_egc)
+// Lua: n = node.LFS.reload(lfsimage)
+static int node_lfsreload (lua_State *L) {
+  lua_settop(L, 1);
+  luaL_lfsreload(L);
+  return 1;
+}
+
+// Lua: n = node.flashreload(lfsimage)
+static int node_lfsreload_deprecated (lua_State *L) {
+  platform_print_deprecation_note("node.flashreload", "soon. Use node.LFS interface instead");
+  return node_lfsreload (L);
+}
+
+// Lua: n = node.flashindex(module)
+// Lua: n = node.LFS.get(module)
+static int node_lfsindex (lua_State *L) {
+  lua_settop(L, 1);
+  luaL_pushlfsmodule(L);
+  return 1;
+}
+
+// Lua: n = node.LFS.list([option])
+// Note that option is ignored in this release
+static int node_lfslist (lua_State *L) {
+  lua_settop(L, 1);
+  luaL_pushlfsmodules(L);
+  if (lua_istable(L, -1) && lua_getglobal(L, "table") == LUA_TTABLE) {
+    lua_getfield(L, -1, "sort");
+    lua_remove(L, -2);       /* remove table table */
+    lua_pushvalue(L, -2);    /* dup array of modules ref to ToS */
+    lua_call(L, 1, 0);
+  }
+  return 1;
+}
+
+
+//== node.LFS Table emulator ==============================================//
+
+
+static void add_int_field( lua_State* L, lua_Integer i, const char *name){
+  lua_pushinteger(L, i);
+  lua_setfield(L, -2, name);
+}
+
+static void get_lfs_config ( lua_State* L ){
+    int config[5];
+    lua_getlfsconfig(L, config);
+    lua_createtable(L, 0, 4);
+    add_int_field(L, config[0], "lfs_mapped");
+    add_int_field(L, config[1], "lfs_base");
+    add_int_field(L, config[2], "lfs_size");
+    add_int_field(L, config[3], "lfs_used");
+}
+
+static int node_lfs_func (lua_State* L) {      /*T[1] = LFS, T[2] = fieldname */
+  lua_remove(L, 1);
+  lua_settop(L, 1);
+  const char *name = lua_tostring(L, 1);
+  if (!name) {
+    lua_pushnil(L);
+  } else if (!strcmp(name, "config")) {
+    get_lfs_config(L);
+  } else if (!strcmp(name, "time")) {
+    luaL_pushlfsdts(L);
+  } else {
+    luaL_pushlfsmodule(L);
+  }
+  return 1;
+}
+
+LROT_BEGIN(node_lfs_meta, NULL, LROT_MASK_INDEX)
+  LROT_FUNCENTRY( __index, node_lfs_func)
+LROT_END(node_lfs_meta, NULL, LROT_MASK_INDEX)
+
+LROT_BEGIN(node_lfs, LROT_TABLEREF(node_lfs_meta), 0)
+  LROT_FUNCENTRY( list, node_lfslist)
+  LROT_FUNCENTRY( get, node_lfsindex)
+  LROT_FUNCENTRY( reload, node_lfsreload )
+LROT_END(node_lfs, LROT_TABLEREF(node_lfs_meta), 0)
+
+
+
+
+
+#if defined(CONFIG_LUA_VERSION_51)
+LROT_BEGIN(node_egc, NULL, 0)
   LROT_FUNCENTRY( setmode,           node_egc_setmode )
   LROT_NUMENTRY ( NOT_ACTIVE,        EGC_NOT_ACTIVE )
   LROT_NUMENTRY ( ON_ALLOC_FAILURE,  EGC_ON_ALLOC_FAILURE )
   LROT_NUMENTRY ( ON_MEM_LIMIT,      EGC_ON_MEM_LIMIT )
   LROT_NUMENTRY ( ALWAYS,            EGC_ALWAYS )
 LROT_END(node_egc, NULL, 0)
+#endif
 
 
-LROT_BEGIN(node_task)
+LROT_BEGIN(node_task, NULL, 0)
   LROT_FUNCENTRY( post,            node_task_post )
   LROT_NUMENTRY ( LOW_PRIORITY,    TASK_PRIORITY_LOW )
   LROT_NUMENTRY ( MEDIUM_PRIORITY, TASK_PRIORITY_MEDIUM )
@@ -708,7 +825,7 @@ LROT_END(node_task, NULL, 0)
 
 
 // Wakup reasons
-LROT_BEGIN(node_wakeup)
+LROT_BEGIN(node_wakeup, NULL, 0)
   LROT_NUMENTRY ( GPIO,     ESP_SLEEP_WAKEUP_GPIO )
   LROT_NUMENTRY ( TIMER,    ESP_SLEEP_WAKEUP_TIMER )
   LROT_NUMENTRY ( TOUCHPAD, ESP_SLEEP_WAKEUP_TOUCHPAD )
@@ -716,21 +833,27 @@ LROT_BEGIN(node_wakeup)
   LROT_NUMENTRY ( ULP,      ESP_SLEEP_WAKEUP_ULP )
 LROT_END(node_wakeup, NULL, 0)
 
-LROT_BEGIN(node)
+LROT_BEGIN(node, NULL, 0)
   LROT_FUNCENTRY( bootreason, node_bootreason )
+#if defined(CONFIG_IDF_TARGET_ESP32)
   LROT_FUNCENTRY( chipid,     node_chipid )
+#endif
   LROT_FUNCENTRY( compile,    node_compile )
   LROT_FUNCENTRY( cpuload,    node_cpuload )
   LROT_FUNCENTRY( dsleep,     node_dsleep )
+#if defined(CONFIG_LUA_VERSION_51)
   LROT_TABENTRY ( egc,        node_egc )
-  LROT_FUNCENTRY( flashreload,luaN_reload_reboot )
-  LROT_FUNCENTRY( flashindex, luaN_index )
+#endif
+  LROT_FUNCENTRY( flashreload,node_lfsreload_deprecated )
+  LROT_FUNCENTRY( flashindex, node_lfsindex )
+  LROT_TABENTRY(  LFS,        node_lfs )
   LROT_FUNCENTRY( heap,       node_heap )
   LROT_FUNCENTRY( input,      node_input )
   LROT_FUNCENTRY( output,     node_output )
   LROT_FUNCENTRY( osoutput,   node_osoutput )
   LROT_FUNCENTRY( osprint,    node_osprint )
   LROT_FUNCENTRY( restart,    node_restart )
+  LROT_FUNCENTRY( setonerror, node_setonerror )
   LROT_FUNCENTRY( sleep,      node_sleep )
   LROT_FUNCENTRY( stripdebug, node_stripdebug )
   LROT_TABENTRY ( task,       node_task )
@@ -738,5 +861,10 @@ LROT_BEGIN(node)
   LROT_TABENTRY ( wakeup,     node_wakeup )
 LROT_END(node, NULL, 0)
 
+int luaopen_node(lua_State *L)
+{
+  lua_settop(L, 0);
+  return node_setonerror(L);  /* set default onerror action */
+}
 
-NODEMCU_MODULE(NODE, "node", node, NULL);
+NODEMCU_MODULE(NODE, "node", node, luaopen_node);
