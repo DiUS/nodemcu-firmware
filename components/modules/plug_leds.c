@@ -235,7 +235,7 @@ static int led_transparent( lua_State *L )
   return 1;
 }
 
-static int led_get( lua_State* L, uint16_t count)
+static int led_get( lua_State* L )
 {
   unsigned int l     = luaL_checkinteger( L, 1 );
   unsigned int level = luaL_checkinteger( L, 2 );
@@ -336,7 +336,7 @@ static int led_iomux( lua_State* L )
 }
 
 // Module function map
-LROT_BEGIN(plug_leds)
+LROT_BEGIN(plug_leds, NULL, 0)
   LROT_FUNCENTRY( init,        led_init )
 
   LROT_FUNCENTRY( red,         led_red )

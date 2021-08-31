@@ -740,8 +740,8 @@ static int ls4pp_submit(lua_State *L)
   if (!state_is_active(sud->state) || !sud->state->ctx)
     return luaL_error(L, "s4pp submit after close");
 
-  luaL_checkanytable(L, 2);
-  luaL_checkanyfunction(L, 3);
+  luaL_checktable(L, 2);
+  luaL_checkfunction(L, 3);
   lua_settop(L, 3);
 
   if (sud->submit_ref != LUA_NOREF)
@@ -797,7 +797,7 @@ static int ls4pp_submit_flash_fifo(lua_State *L)
   if (sud->submit_ref != LUA_NOREF)
     return luaL_error(L, "submit already in progress");
 
-  luaL_checkanyfunction(L, 2);
+  luaL_checkfunction(L, 2);
   sud->state->fifo_max = luaL_optint(L, 3, -1);
   lua_settop(L, 2); // toss the max_n, if any
 
@@ -935,7 +935,7 @@ static int ls4pp_on(lua_State *L)
     NULL,
   };
   int opt = luaL_checkoption(L, 2, NULL, cbs);
-  luaL_checkanyfunction(L, 3);
+  luaL_checkfunction(L, 3);
   lua_settop(L, 3);
 
   switch (opt)
@@ -963,7 +963,7 @@ static int ls4pp_on(lua_State *L)
 // s4pp.create({ server=, port=, user=, key=, hide=0/nil/1, format=0/1 })
 static int ls4pp_create(lua_State *L)
 {
-  luaL_checkanytable(L, 1);
+  luaL_checktable(L, 1);
   lua_settop(L, 1);
 
   s4pp_userdata_t *sud =
@@ -1052,7 +1052,9 @@ static int ls4pp_sessions(lua_State *L)
 }
 
 
-LROT_BEGIN(s4pp_instance)
+LROT_BEGIN(s4pp_instance, NULL, 0)
+  LROT_FUNCENTRY( __gc,               ls4pp_gc )
+  LROT_TABENTRY(  __index,            s4pp_instance )
   LROT_FUNCENTRY( on,                 ls4pp_on )
 #if CONFIG_NODEMCU_CMODULE_FLASHFIFO
   LROT_FUNCENTRY( submit_flash_fifo,  ls4pp_submit_flash_fifo )
@@ -1061,12 +1063,10 @@ LROT_BEGIN(s4pp_instance)
   LROT_FUNCENTRY( commit,             ls4pp_commit )
   LROT_FUNCENTRY( close,              ls4pp_gc )
   LROT_FUNCENTRY( status,             ls4pp_status )
-  LROT_FUNCENTRY( __gc,               ls4pp_gc )
-  LROT_TABENTRY(  __index,            s4pp_instance )
 LROT_END(s4pp_instance, NULL, 0)
 
 
-LROT_BEGIN(s4pp)
+LROT_BEGIN(s4pp, NULL, 0)
   LROT_FUNCENTRY( create,   ls4pp_create )
   LROT_FUNCENTRY( sessions, ls4pp_sessions )
 LROT_END(s4pp, NULL, 0)
@@ -1074,7 +1074,7 @@ LROT_END(s4pp, NULL, 0)
 
 static int luaopen_s4pp(lua_State *L)
 {
-  luaL_rometatable(L, S4PP_TABLE_INSTANCE, (void *)s4pp_instance_map);
+  luaL_rometatable(L, S4PP_TABLE_INSTANCE, LROT_TABLEREF(s4pp_instance));
 
   s4pp_task = task_get_id(s4pp_handle_event);
   conn_task = task_get_id(handle_conn);

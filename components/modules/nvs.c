@@ -227,7 +227,7 @@ static int lnvs_makekey(lua_State *L)
   return 1;
 }
 
-LROT_BEGIN(nvs)
+LROT_BEGIN(nvs, NULL, 0)
   LROT_FUNCENTRY( init,      lnvs_init )
   LROT_FUNCENTRY( set,       lnvs_set )
   LROT_FUNCENTRY( get,       lnvs_get )

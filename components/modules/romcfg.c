@@ -255,7 +255,7 @@ static int romcfg_is_empty(lua_State *L)
   return 1;
 }
 
-LROT_BEGIN(romcfg)
+LROT_BEGIN(romcfg, NULL, 0)
   LROT_FUNCENTRY( get,     romcfg_get )
   LROT_FUNCENTRY( get_raw, romcfg_get_raw )
   LROT_FUNCENTRY( erase,   romcfg_erase )

@@ -36,6 +36,7 @@
 #include "lauxlib.h"
 #include "lmem.h"
 #include <stdint.h>
+#include <stdbool.h>
 #include <string.h>
 
 typedef enum {
@@ -196,7 +197,7 @@ static int nrfboot_handlebytes(lua_State *L)
 }
 
 
-LROT_BEGIN(nrfboot)
+LROT_BEGIN(nrfboot, NULL, 0)
   LROT_FUNCENTRY(restart,      nrfboot_restart)
   LROT_FUNCENTRY(handle_bytes, nrfboot_handlebytes)
 LROT_END(nrfboot, NULL, 0)

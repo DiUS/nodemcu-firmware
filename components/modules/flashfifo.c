@@ -996,7 +996,7 @@ static int flashfifo_maxval(lua_State *L)
 }
 
 
-LROT_BEGIN(flashfifo)
+LROT_BEGIN(flashfifo, NULL, 0)
   LROT_FUNCENTRY(prepare, flashfifo_prepare)
   LROT_FUNCENTRY(ready,   flashfifo_ready)
   LROT_FUNCENTRY(put,     flashfifo_put)
