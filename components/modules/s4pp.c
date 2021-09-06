@@ -613,7 +613,7 @@ static void report_error_real(lua_State *L, s4pp_state_t *state, int errcode, in
     lua_rawgeti(L, LUA_REGISTRYINDEX, sud->error_ref);
     lua_pushinteger(L, errcode);
     lua_pushinteger(L, line);
-    lua_call(L, 2, 0);
+    luaL_pcallx(L, 2, 0);
   }
   lua_settop(L, top);
 }
@@ -648,7 +648,7 @@ static void s4pp_handle_event(task_param_t param, task_prio_t prio)
     {
       lua_rawgeti(L, LUA_REGISTRYINDEX, sud->submit_done_ref);
       unref_and_clear(L, sud->submit_done_ref);
-      lua_call(L, 0, 0);
+      luaL_pcallx(L, 0, 0);
     }
     lua_settop(L, top);
   }
@@ -835,7 +835,7 @@ static void on_commit(s4pp_ctx_t *ctx, bool success, unsigned num_items)
   {
     lua_rawgeti(L, LUA_REGISTRYINDEX, sud->commit_ref);
     lua_pushinteger(L, num_items);
-    lua_call(L, 1, 0);
+    luaL_pcallx(L, 1, 0);
   }
   else if (!success && sud->error_ref != LUA_NOREF)
     report_error(L, state, s4pp_last_error(ctx));
@@ -917,7 +917,7 @@ static void on_notify(s4pp_ctx_t *ctx, unsigned code, unsigned nargs, const char
       lua_pushnumber(L, (lua_Number)(now & 0x1FFFFFFFFFFFFFull));
       nargs+=4;
     }
-    lua_call(L, nargs + 1, 0);
+    luaL_pcallx(L, nargs + 1, 0);
   }
   lua_settop(L, top);
 }
