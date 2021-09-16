@@ -1052,7 +1052,7 @@ static int ls4pp_sessions(lua_State *L)
 }
 
 
-LROT_BEGIN(s4pp_instance, NULL, 0)
+LROT_BEGIN(s4pp_instance, NULL, LROT_MASK_GC_INDEX)
   LROT_FUNCENTRY( __gc,               ls4pp_gc )
   LROT_TABENTRY(  __index,            s4pp_instance )
   LROT_FUNCENTRY( on,                 ls4pp_on )
@@ -1063,7 +1063,7 @@ LROT_BEGIN(s4pp_instance, NULL, 0)
   LROT_FUNCENTRY( commit,             ls4pp_commit )
   LROT_FUNCENTRY( close,              ls4pp_gc )
   LROT_FUNCENTRY( status,             ls4pp_status )
-LROT_END(s4pp_instance, NULL, 0)
+LROT_END(s4pp_instance, NULL, LROT_MASK_GC_INDEX)
 
 
 LROT_BEGIN(s4pp, NULL, 0)
