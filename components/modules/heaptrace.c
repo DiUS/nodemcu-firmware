@@ -69,6 +69,22 @@ static int lht_dump(lua_State *L)
   return 0;
 }
 
+static int lht_get_record(lua_State *L)
+{
+  int index=luaL_checkint(L, 1);
+  heap_trace_record_t res;
+
+  esp_err_t err=heap_trace_get(index,&res);
+  if (err == ESP_ERR_INVALID_ARG)
+    return 0;
+  if (err != ESP_OK)
+    return luaL_error(L, "failed to get record from heap tracing; code %d", err);
+  lua_pushinteger(L, res.size);
+  for (int i=0;i<CONFIG_HEAP_TRACING_STACK_DEPTH;i++)
+    lua_pushinteger(L, (unsigned)res.alloced_by[i]);
+  return CONFIG_HEAP_TRACING_STACK_DEPTH+1;
+}
+
 
 LROT_BEGIN(heaptrace, NULL, 0)
   LROT_FUNCENTRY( init,       lht_init )
@@ -76,7 +92,7 @@ LROT_BEGIN(heaptrace, NULL, 0)
   LROT_FUNCENTRY( stop,       lht_stop )
   LROT_FUNCENTRY( resume,     lht_resume )
   LROT_FUNCENTRY( dump,       lht_dump )
-
+  LROT_FUNCENTRY( get_record, lht_get_record )
   LROT_NUMENTRY( TRACE_ALL,   HEAP_TRACE_ALL )
   LROT_NUMENTRY( TRACE_LEAKS, HEAP_TRACE_LEAKS )
 LROT_END(heaptrace, NULL, 0)
