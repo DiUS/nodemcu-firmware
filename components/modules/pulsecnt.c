@@ -19,6 +19,8 @@ CONDITIONS OF ANY KIND, either express or implied.
 #include "platform.h"
 #include "task/task.h"
 #include "driver/pcnt.h"
+#include "soc/pcnt_reg.h"
+#include "hal/pcnt_ll.h"
 #include "esp_log.h"
 #include "lextra.h"
 
