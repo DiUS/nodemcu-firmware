@@ -71,6 +71,7 @@ elseif(IDF_TARGET STREQUAL "esp32s3")
   )
 elseif(IDF_TARGET STREQUAL "esp32c3")
   list(APPEND module_srcs
+    "flashfifo.c"
   )
 endif()
 
