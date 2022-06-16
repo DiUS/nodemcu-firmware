@@ -40,7 +40,7 @@
 #include <esp_spi_flash.h>
 #include <esp_partition.h>
 
-#define CACHE_WORKAROUND
+//#define CACHE_WORKAROUND
 #ifdef CACHE_WORKAROUND
 // Workaround for writes/erase not flushing cache; needed until we use an IDF
 // with 2752654043fd14cb8f2b759ee9409c6c5942c157 included.
