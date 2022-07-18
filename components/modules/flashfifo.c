@@ -198,23 +198,9 @@ typedef struct
 } flash_fifo_slot_t;
 
 
-INTERNAL static const flash_fifo_t* flash_fifo_get_header(void)
+INTERNAL static flash_fifo_t* flash_fifo_get_header(void)
 {
-  static flash_fifo_t hdr={
-    .magic=FLASH_FIFO_MAGIC,
-    .sector_size=SPI_FLASH_SEC_SIZE,
-    .head_counter=0,
-    .tail_counter=1,
-    .dictionary=2,
-    .data=3,
-    .tail_byte_offset=32,
-    .data_byte_offset=64,
-    .data_entries_per_sector=(SPI_FLASH_SEC_SIZE-64)/sizeof(sample_t),
-    .counter_sectors=1,
-    .data_sectors=0,
-    .partition=NULL,
-    .mmap=NULL,
-  };
+  static flash_fifo_t hdr;
   // Look up partition info and establish mmap on first access
   if (!hdr.partition)
   {
@@ -222,10 +208,10 @@ INTERNAL static const flash_fifo_t* flash_fifo_get_header(void)
       PLATFORM_PARTITION_TYPE_DIUS,
       PLATFORM_PARTITION_SUBTYPE_DIUS_FLASHFIFO,
       NULL);
-    hdr.data_sectors = (hdr.partition->size / hdr.sector_size) - hdr.data;
     spi_flash_mmap_handle_t ignored;
     esp_partition_mmap(hdr.partition, 0, hdr.partition->size,
                        SPI_FLASH_MMAP_DATA, (const void **)&hdr.mmap, &ignored);
+    memcpy(&hdr, hdr.mmap, offsetof(flash_fifo_t, partition));
   }
   return &hdr;
 }
@@ -276,7 +262,7 @@ INTERNAL static bool flash_fifo_erase_dictionary(const flash_fifo_t* fifo)
 
 INTERNAL static uint32_t flash_fifo_get_dictionary_address(const flash_fifo_t* fifo, int index)
 {
-   return fifo->dictionary*fifo->sector_size+DICT_ENTRY_SIZE*index;
+  return fifo->dictionary*fifo->sector_size+DICT_ENTRY_SIZE*index;
 }
 
 INTERNAL static const uint8_t* flash_fifo_get_dictionary_pointer(const flash_fifo_t* fifo, int index)
@@ -543,6 +529,38 @@ INTERNAL static bool flash_fifo_drop_one_sample(const flash_fifo_t* fifo)
 }
 
 
+INTERNAL static void flash_fifo_ensure_header_valid()
+{
+  flash_fifo_t* fifo=flash_fifo_get_header();
+  if (!flash_fifo_valid_header(fifo)) {
+    // write header
+    flash_fifo_t wr_header = {
+      .magic=FLASH_FIFO_MAGIC,
+      .sector_size=SPI_FLASH_SEC_SIZE,
+      // .fifo_header=0, this header sits in sector zero
+      .head_counter=1,
+      .tail_counter=2,
+      .dictionary=3,
+      .data=4,
+      .tail_byte_offset=32,
+      .data_byte_offset=64,
+      .data_entries_per_sector=(SPI_FLASH_SEC_SIZE-64)/sizeof(sample_t),
+      .counter_sectors=1,
+      .data_sectors=0,
+    };
+    wr_header.data_sectors = (fifo->partition->size / wr_header.sector_size) - wr_header.data;
+    esp_partition_write(fifo->partition, 0, &wr_header, offsetof(flash_fifo_t, partition));
+#ifdef CACHE_WORKAROUND
+    flush_cache();
+#endif
+    memcpy(fifo, fifo->mmap, offsetof(flash_fifo_t, partition));
+    if (fifo->magic == FLASH_FIFO_MAGIC) {
+      flash_fifo_clear_content(fifo);
+    }
+  }
+}
+
+
 INTERNAL static bool flash_fifo_init()
 {
   const flash_fifo_t* fifo=flash_fifo_get_header();
@@ -722,6 +740,12 @@ API static bool flash_fifo_check_magic(void)
 API static bool flash_fifo_prepare(uint32_t tagcount)
 {
   return flash_fifo_init();
+}
+
+
+API static void flash_fifo_ensure_fifo_init(void)
+{
+  flash_fifo_ensure_header_valid();
 }
 
 
@@ -995,6 +1019,12 @@ static int flashfifo_maxval(lua_State *L)
   return 1;
 }
 
+static int flashfifo_startup(lua_State *L)
+{
+  flash_fifo_ensure_fifo_init();
+  return 0;
+}
+
 
 LROT_BEGIN(flashfifo, NULL, 0)
   LROT_FUNCENTRY(prepare, flashfifo_prepare)
@@ -1009,4 +1039,4 @@ LROT_BEGIN(flashfifo, NULL, 0)
   LROT_FUNCENTRY(maxval,  flashfifo_maxval)
 LROT_END(flashfifo, NULL, 0)
 
-NODEMCU_MODULE(FLASHFIFO, "flashfifo", flashfifo, NULL);
+NODEMCU_MODULE(FLASHFIFO, "flashfifo", flashfifo, flashfifo_startup);
