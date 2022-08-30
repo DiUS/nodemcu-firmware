@@ -114,6 +114,9 @@ static int node_bootreason( lua_State *L)
 #endif
 #if defined(CONFIG_IDF_TARGET_ESP32S3) || defined(CONFIG_IDF_TARGET_ESP32C3)
     case EFUSE_RESET:
+    case USB_UART_CHIP_RESET:
+    case USB_JTAG_CHIP_RESET:
+    case POWER_GLITCH_RESET:
 #endif
     case TG0WDT_SYS_RESET:
     case TG1WDT_SYS_RESET:
@@ -606,7 +609,7 @@ static int writer(lua_State* L, const void* p, size_t size, void* u)
   if (!file)
     return 1;
 
-  if (size != 0 && (size != fwrite((const char *)p, size, 1, file)) )
+  if (size != 0 && (fwrite((const char *)p, size, 1, file) != 1) )
     return 1;
 
   return 0;

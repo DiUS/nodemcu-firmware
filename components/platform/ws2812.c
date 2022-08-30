@@ -138,7 +138,7 @@ int platform_ws2812_setup( uint8_t gpio_num, uint8_t num_mem, const uint8_t *dat
 {
   int channel;
 
-  if ((channel = platform_rmt_allocate( num_mem )) >= 0) {
+  if ((channel = platform_rmt_allocate( num_mem, RMT_MODE_TX )) >= 0) {
     ws2812_chain_t *chain = &(ws2812_chains[channel]);
 
     chain->valid = true;
@@ -187,6 +187,7 @@ int platform_ws2812_send( void )
   // common settings
   rmt_tx.mem_block_num = 1;
   rmt_tx.clk_div = WS2812_CLKDIV;
+  rmt_tx.flags = 0;
   rmt_tx.tx_config.loop_en = false;
   rmt_tx.tx_config.carrier_en = false;
   rmt_tx.tx_config.idle_level = 0;
