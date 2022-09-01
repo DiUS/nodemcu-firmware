@@ -35,6 +35,7 @@
 #include "module.h"
 #include "lauxlib.h"
 #include "lmem.h"
+#include "esp_attr.h"
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -63,6 +64,8 @@ static uint8_t  magic     = BP_MAGIC; // We will choose the actual magic charact
 static uint8_t  exp_page  = 0;
 static bool     send_done = false;
 
+RTC_DATA_ATTR uint64_t fw_checksum = 0;
+
 extern const uint8_t nrf_bin[]     asm("_binary_nrf_bin_start");
 extern const uint8_t nrf_bin_end[] asm("_binary_nrf_bin_end");
 
@@ -79,6 +82,19 @@ static uint16_t crc16 (uint16_t crc, const uint8_t *data, uint16_t length)
     crc = (crc << 8) ^ ((uint16_t)(x << 12)) ^ ((uint16_t)(x <<5)) ^ ((uint16_t)x);
   }
   return crc;
+}
+
+
+static void init_fw_checksum()
+{
+  uint32_t len = nrf_bin_end - nrf_bin;
+  const uint8_t *p = nrf_bin;
+  uint64_t x = 0;
+  while (len--)
+  {
+    x = ((x<<17) ^ (x>>23)) + *(p++);
+  }
+  fw_checksum = x;
 }
 
 
@@ -137,8 +153,17 @@ static bool handleByte(lua_State *L, uint8_t c)
 
     if ((int)pageno*BP_PAGESIZE >= fw_len)
     {
-      uint8_t eof[] = { magic, BP_NOPAGE };
-      lua_pushlstring(L, (const char *)eof, sizeof(eof));
+      struct __attribute__((__packed__))
+      {
+        uint8_t magic;
+        uint8_t index;
+        uint64_t fw_csum; // This extra 8 bytes should not cause any harm on the plug ?!?!?!
+      } eof = {
+        .magic = magic,
+        .index = BP_NOPAGE,
+        .fw_csum = fw_checksum,
+      };
+      lua_pushlstring(L, (const char *)&eof, sizeof(eof));
       state = RECV;
       return true;
     }
@@ -197,9 +222,18 @@ static int nrfboot_handlebytes(lua_State *L)
 }
 
 
+static int nrfboot_init(lua_State *L)
+{
+  if (fw_checksum == 0) {
+    init_fw_checksum();
+  }
+  return 0;
+}
+
+
 LROT_BEGIN(nrfboot, NULL, 0)
   LROT_FUNCENTRY(restart,      nrfboot_restart)
   LROT_FUNCENTRY(handle_bytes, nrfboot_handlebytes)
 LROT_END(nrfboot, NULL, 0)
 
-NODEMCU_MODULE(NRFBOOT, "nrfboot", nrfboot, NULL);
+NODEMCU_MODULE(NRFBOOT, "nrfboot", nrfboot, nrfboot_init);
