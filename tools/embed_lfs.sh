@@ -26,7 +26,7 @@ fi
 # (fixed) size of riscv attributes.
 # If the map file was a bit saner with its line breaks this would
 # have been a straight forward grep for for .rodata.embedded.*lua.flash.store
-LFS_SIZE_ADDR=$(grep -E "0x[0-9a-f]+[ ]+0x[0-9a-f]+[ ]+esp-idf/embedded_lfs/libembedded_lfs.a\(lua.flash.store.reserved.S.obj\)" "${MAP_FILE}" | grep -v '^ \.' | grep -vw "0x24" | awk '{print $2,$1}' | sort -n -k 1.3 | tail -1)
+LFS_SIZE_ADDR=$(grep -E "0x[0-9a-f]+[ ]+0x[0-9a-f]+[ ]+esp-idf/embedded_lfs/libembedded_lfs.a\(lua.flash.store.reserved.S.obj\)" "${MAP_FILE}" | grep -v '^ \.' | awk '{print $2,$1}' | sort -n -k 1 | tail -1)
 if [ -z "${LFS_SIZE_ADDR}" ]; then
 	echo "Error: LFS segment not found. Use 'make clean; make' perhaps?"
 	exit 1
