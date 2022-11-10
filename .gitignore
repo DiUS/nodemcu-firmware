@@ -11,6 +11,7 @@ tools/toolchains
 extmods.ini
 .ccache
 bin
+version.txt
 
 #ignore Eclipse project files
 .cproject
