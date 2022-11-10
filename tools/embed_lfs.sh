@@ -15,34 +15,16 @@ if [ ! -f "${LUAC_CROSS}" ]; then
 	exit 1
 fi
 
-# Extract the line containing the data size of the LFS object, filtering out
-# lines for .bss/.data/.text, sorting the remaining two entries (actual LFS
-# data and (optional) riscv attributes) so we can discard the latter if
-# present.
-# Unfortunately, the sort-by-size does not work as intended, because the
-# sizes are in hex, and sort -n thinks 0x2d004 is less than 0x24.
-# As a fix, we instead (or rather, prior to attempting the sort)
-# filter out the line containing the word "0x24", which appears to be the
-# (fixed) size of riscv attributes.
-# If the map file was a bit saner with its line breaks this would
-# have been a straight forward grep for for .rodata.embedded.*lua.flash.store
-LFS_SIZE_ADDR=$(grep -E "0x[0-9a-f]+[ ]+0x[0-9a-f]+[ ]+esp-idf/embedded_lfs/libembedded_lfs.a\(lua.flash.store.reserved.S.obj\)" "${MAP_FILE}" | grep -v '^ \.' | awk '{print $2,$1}' | sort -n -k 1 | tail -1)
-if [ -z "${LFS_SIZE_ADDR}" ]; then
-	echo "Error: LFS segment not found. Use 'make clean; make' perhaps?"
-	exit 1
+# Extract the start/end symbols of the LFS object, then calculate the
+# available size from that.
+LFS_ADDR=$(grep -E '0x[0-9a-f]+ +_binary_lua_flash_store_reserved_start' "${MAP_FILE}" | awk '{print $1}')
+LFS_ADDR_END=$(grep -E '0x[0-9a-f]+ +_binary_lua_flash_store_reserved_end' "${MAP_FILE}" | awk '{print $1}')
+if [ "${LFS_ADDR}" = "" ]
+then
+  echo "Error: LFS segment address not found"
+  exit 1
 fi
-
-LFS_ADDR=$(echo "${LFS_SIZE_ADDR}" | cut -d ' ' -f 2)
-if [ -z "${LFS_ADDR}" ]; then
-	echo "Error: LFS segment address not found"
-	exit 1
-fi
-# The reported size is +4 due to the length field added by the IDF
-LFS_SIZE=$(( $(echo "${LFS_SIZE_ADDR}" | cut -d ' ' -f 1) - 4 ))
-if [ -z "${LFS_SIZE}" ]; then
-	echo "Error: LFS segment size not found"
-	exit 1
-fi
+LFS_SIZE=$((LFS_ADDR_END - LFS_ADDR))
 
 printf "LFS segment address %s, length %s (0x%x)\n" "${LFS_ADDR}" "${LFS_SIZE}" "${LFS_SIZE}"
 
