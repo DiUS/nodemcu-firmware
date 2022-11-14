@@ -759,7 +759,7 @@ static int ls4pp_submit(lua_State *L)
 
 
 #if CONFIG_NODEMCU_CMODULE_FLASHFIFO
-extern int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t idx);
+extern int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t idx, uint8_t device_tag);
 extern bool flash_fifo_drop_samples(uint32_t from_top);
 
 static bool on_fifo_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
@@ -771,7 +771,8 @@ static bool on_fifo_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
   if (state->fifo_max != -1 && state->fifo_consumed >= state->fifo_max)
     return false;
 
-  int n = flash_fifo_fill_s4pp_sample(sample, state->fifo_consumed);
+  // TODO --- make device tag come part of S4PP config
+  int n = flash_fifo_fill_s4pp_sample(sample, state->fifo_consumed,'s');
   if (n < 0)
   {
     state->fifo_consumed += -n;

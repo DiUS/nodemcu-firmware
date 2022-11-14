@@ -752,7 +752,7 @@ API static void flash_fifo_ensure_fifo_init(void)
 #if CONFIG_NODEMCU_CMODULE_S4PP
 #include "s4pp.h"
 
-int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs)
+int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs, uint8_t device_tag)
 {
   sample_t s;
   if (!flash_fifo_peek_sample (&s, offs))
@@ -840,12 +840,13 @@ int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs)
     while (*mac)
       *p++ = *mac++;
     *p++ = '-';
-    *p++ = 'p';
+    *p++ = device_tag;
     *p++ = '-';
     *p++ = conv.s[0];
     *p++ = conv.s[1];
     *p++ = conv.s[2];
     *p++ = conv.s[3];
+    *p++ = '\0';
 
     sample->name = namebuf;
   }
