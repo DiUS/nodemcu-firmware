@@ -768,23 +768,24 @@ static bool on_fifo_pull(s4pp_ctx_t *ctx, s4pp_sample_t *sample)
   if (!state_is_active(state))
     return false;
 
-  if (state->fifo_max != -1 && state->fifo_consumed >= state->fifo_max)
-    return false;
-
-  // TODO --- make device tag come part of S4PP config
-  int n = flash_fifo_fill_s4pp_sample(sample, state->fifo_consumed,'s');
-  if (n < 0)
+  while (state->fifo_max == -1 || state->fifo_consumed < state->fifo_max)
   {
-    state->fifo_consumed += -n;
-    return false;
+    // TODO --- make device tag come part of S4PP config
+    int n = flash_fifo_fill_s4pp_sample(sample, state->fifo_consumed,'s');
+    if (n < 0)
+    { // Bad complex sample. Skip and try again
+      state->fifo_consumed += -n;
+      continue;
+    }
+    if (n > 0)
+    {
+      state->fifo_consumed += n;
+      return true;
+    }
+    // n==0, FIFO empty
+    break;
   }
-  else if (n > 0)
-  {
-    state->fifo_consumed += n;
-    return true;
-  }
-  else
-    return false;
+  return false;
 }
 
 
