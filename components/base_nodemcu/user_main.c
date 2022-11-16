@@ -110,6 +110,9 @@ void nodemcu_init(void)
     }
     const char *label = CONFIG_NODEMCU_DEFAULT_SPIFFS_LABEL;
 
+    if (strcmp(label, "DISABLED") == 0)
+      return;
+
     esp_vfs_spiffs_conf_t spiffs_cfg = {
       .base_path = "",
       .partition_label = (label && label[0]) ? label : NULL,

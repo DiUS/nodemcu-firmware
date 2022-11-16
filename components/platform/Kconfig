@@ -25,6 +25,8 @@ menu "NodeMCU platform config"
             be used to control which partition gets mounted as the
             default file system. Leaving it empty defaults to using
             the first SPIFFS partition found.
+            Set to "DISABLED" to prevent NodeMCU from looking for a
+            SPIFFS partition on startup altogether.
 
     config NODEMCU_MAX_OPEN_FILES
         int "Maximum number of open files"

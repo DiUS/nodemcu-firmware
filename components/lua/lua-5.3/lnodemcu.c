@@ -559,7 +559,9 @@ LUAI_FUNC int luaN_init (lua_State *L) {
           g->ROstrt.nuse = fh->nROuse ;
           g->ROstrt.size = fh->nROsize;
           sethvalue(L, &g->LFStable, cast(Table *, F->addr + fh->protoROTable));
+#ifndef CONFIG_LUA_SILENT_LFS
            lua_writestringerror("LFS image %s\n", "loaded");
+#endif
         } else if ((fh->flash_sig != 0 && fh->flash_sig != ~0)) {
           lua_writestringerror("LFS image %s\n", "corrupted.");
 #ifndef CONFIG_NODEMCU_EMBEDDED_LFS_SIZE

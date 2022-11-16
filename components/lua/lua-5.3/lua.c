@@ -243,7 +243,7 @@ static int pmain (lua_State *L) {
   if ((platform_rcr_get_startup_option() & STARTUP_OPTION_NO_BANNER) == 0) {
     print_version(L);
   }
-#else
+#elif !defined(CONFIG_LUA_DISABLE_STARTUP_BANNER)
   printf("\n%s build %s powered by %s [%s] on IDF %s\n",
     NODE_VERSION, BUILD_DATE, LUA_RELEASE, XLUA_OPT_STR, IDF_VER);
 #endif

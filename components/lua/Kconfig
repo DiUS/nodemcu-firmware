@@ -41,6 +41,16 @@ menu "Lua configuration"
           usage and somewhat reduced performance over the default
           single precision floating point.
 
+    config LUA_DISABLE_STARTUP_BANNER
+      bool "Disable startup banner"
+      default "n"
+
+    config LUA_SILENT_LFS
+      depends on LUA_VERSION_53
+      bool "Suppress the printing of the 'LFS image loaded' on startup"
+      default "n"
+
+
     menu "Core Lua modules"
 
         config LUA_BUILTIN_STRING
