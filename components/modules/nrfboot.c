@@ -222,6 +222,15 @@ static int nrfboot_handlebytes(lua_State *L)
 }
 
 
+static int nrfboot_get_checksum(lua_State *L)
+{
+  char buf[17];
+  sprintf(buf, "%llx", fw_checksum);
+  lua_pushstring(L, buf);
+  return 1;
+}
+
+
 static int nrfboot_init(lua_State *L)
 {
   if (fw_checksum == 0) {
@@ -234,6 +243,7 @@ static int nrfboot_init(lua_State *L)
 LROT_BEGIN(nrfboot, NULL, 0)
   LROT_FUNCENTRY(restart,      nrfboot_restart)
   LROT_FUNCENTRY(handle_bytes, nrfboot_handlebytes)
+  LROT_FUNCENTRY(get_checksum, nrfboot_get_checksum)
 LROT_END(nrfboot, NULL, 0)
 
 NODEMCU_MODULE(NRFBOOT, "nrfboot", nrfboot, nrfboot_init);
