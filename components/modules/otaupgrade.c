@@ -83,6 +83,10 @@ static int lotaupgrade_write (lua_State *L)
     case ESP_ERR_INVALID_ARG:
       msg = "write not possible, use otaupgrade.commence() first"; break;
     case ESP_ERR_OTA_VALIDATE_FAILED: msg = "not a valid ota image"; break;
+    case ESP_ERR_FLASH_OP_TIMEOUT: msg = "flash op timeout"; break;
+    case ESP_ERR_FLASH_OP_FAIL: msg = "flash op failed"; break;
+    case ESP_ERR_OTA_SELECT_INFO_INVALID: msg = "ota partition invalid content"; break;
+
     default: msg = "ota error"; break;
   }
   if (msg)
