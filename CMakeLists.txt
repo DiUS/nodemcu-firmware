@@ -1,12 +1,10 @@
 cmake_minimum_required(VERSION 3.5)
 set(CONFIG_NVS_ENCRYPTION 1)
 
-if(DEFINED ENV{PROJECT_VER})
-set(PROJECT_VER "$ENV{PROJECT_VER}")
-endif()
-
 if(DEFINED ENV{EXTRA_COMPONENT_DIRS})
-set(EXTRA_COMPONENT_DIRS "$ENV{EXTRA_COMPONENT_DIRS}")
+  # Turn space-separated, quote-aware environment var into CMake list
+  separate_arguments(
+    EXTRA_COMPONENT_DIRS UNIX_COMMAND "$ENV{EXTRA_COMPONENT_DIRS}")
 endif()
 
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
