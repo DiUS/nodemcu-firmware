@@ -34,6 +34,7 @@
 #include "s4pp.h"
 #include "task/task.h"
 #include "lauxlib.h"
+#include "ip_fmt.h"
 #include <lwip/ip_addr.h>
 #include <lwip/dns.h>
 #include <lwip/api.h>
@@ -872,6 +873,22 @@ static int ls4pp_status(lua_State *L)
 }
 
 
+static int ls4pp_getpeer(lua_State *L)
+{
+  s4pp_userdata_t *sud = get_userdata(L);
+  if (!sud->state || !sud->state->conn)
+    return 0;
+
+  lua_pushinteger(L, sud->state->conn->port);
+
+  char ip[IP_STR_SZ];
+  ipstr(ip, &sud->state->conn->resolved_ip);
+  lua_pushstring(L, ip);
+
+  return 2;
+}
+
+
 // Note: also used for client:close()
 static int ls4pp_gc(lua_State *L)
 {
@@ -1065,6 +1082,7 @@ LROT_BEGIN(s4pp_instance, NULL, LROT_MASK_GC_INDEX)
   LROT_FUNCENTRY( commit,             ls4pp_commit )
   LROT_FUNCENTRY( close,              ls4pp_gc )
   LROT_FUNCENTRY( status,             ls4pp_status )
+  LROT_FUNCENTRY( getpeer,            ls4pp_getpeer )
 LROT_END(s4pp_instance, NULL, LROT_MASK_GC_INDEX)
 
 
