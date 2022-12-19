@@ -913,7 +913,7 @@ static int flashfifo_put (lua_State *L)
   if (duration>=(1<<(DICTIONARY_SHIFT-DURATION_SHIFT)))
     luaL_error (L, "Duration too large!");
 
-  s.decimals=decimals|(duration<<4);
+  s.decimals=decimals|(duration<<DURATION_SHIFT);
   flash_fifo_store_sample (&s,mac);
   return 0;
 }
