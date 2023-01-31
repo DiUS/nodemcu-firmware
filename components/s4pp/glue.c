@@ -1,7 +1,7 @@
 #include "s4pp.h"
 #include <mbedtls/aes.h>
 #include <mbedtls/sha256.h>
-#include <esp_system.h>
+#include <esp_random.h>
 #include <string.h>
 
 typedef struct {
@@ -68,21 +68,21 @@ static void init_sha256(void *ctx_in)
 {
   mbedtls_sha256_context *ctx = (mbedtls_sha256_context *)ctx_in;
   mbedtls_sha256_init(ctx);
-  mbedtls_sha256_starts_ret(ctx, 0);
+  mbedtls_sha256_starts(ctx, 0);
 }
 
 
 static void update_sha256(void *ctx_in, const void *msg, int len)
 {
   mbedtls_sha256_context *ctx = (mbedtls_sha256_context *)ctx_in;
-  mbedtls_sha256_update_ret(ctx, (const uint8_t *)msg, len);
+  mbedtls_sha256_update(ctx, (const uint8_t *)msg, len);
 }
 
 
 static void finalize_sha256(void *digest, void *ctx_in)
 {
   mbedtls_sha256_context *ctx = (mbedtls_sha256_context *)ctx_in;
-  mbedtls_sha256_finish_ret(ctx, digest);
+  mbedtls_sha256_finish(ctx, digest);
 }
 
 

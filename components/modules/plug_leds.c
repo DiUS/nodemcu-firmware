@@ -4,14 +4,16 @@
 #include "lauxlib.h"
 #include "platform.h"
 #include "driver/ledc.h"
+#include "soc/gpio_reg.h"
 #include "esp_log.h"
-#include <freertos/semphr.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 
 #define LEVEL_COUNT 4
 #define LED_COUNT   2
 
-static xTaskHandle   hwAccess = NULL;
+static TaskHandle_t   hwAccess = NULL;
 static QueueHandle_t queue;
 static SemaphoreHandle_t init_done;
 typedef enum {
@@ -318,7 +320,7 @@ static int led_iomux( lua_State* L )
   int sig   = luaL_optint(L, 2, -1);
   unsigned int inv   = luaL_optint(L, 3, 0);
 
-  if (!GPIO_IS_VALID_GPIO(pin))
+  if (!platform_gpio_exists(pin))
     return luaL_error(L,"invalid GPIO index: %d\n",pin);
   if (sig>256)
     return luaL_error(L,"invalid signal index: %d\n",sig);
