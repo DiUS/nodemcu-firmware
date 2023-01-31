@@ -37,7 +37,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <esp_spi_flash.h>
 #include <esp_partition.h>
 
 //#define CACHE_WORKAROUND

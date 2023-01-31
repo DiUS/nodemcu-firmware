@@ -12,6 +12,8 @@ extmods.ini
 .ccache
 bin
 version.txt
+managed_components/
+dependencies.lock
 
 #ignore Eclipse project files
 .cproject
