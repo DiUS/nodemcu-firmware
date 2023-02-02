@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 #
 # ESP8266 Firmware Utility
 #
@@ -45,7 +45,7 @@ class ESPFirmwareImage:
     @staticmethod
     def checksum(data, state = ESP_CHECKSUM_MAGIC):
         for b in data:
-            state ^= ord(b)
+            state ^= b
         return state
 
     def __init__(self, filename = None):
@@ -84,7 +84,7 @@ class ESPFirmwareImage:
             self.segments.append((addr, len(data), data))
 
     def save(self, filename):
-        f = file(filename, 'wb')
+        f = open(filename, 'wb')
         f.write(struct.pack('<BBBBI', ESPFirmwareImage.ESP_IMAGE_MAGIC, len(self.segments),
             self.flash_mode, self.flash_size_freq, self.entrypoint))
 
@@ -100,7 +100,7 @@ class ESPFirmwareImage:
         return f
 
     def save_ota(self, filename, initially_valid, max_tests):
-        f = file(filename, 'wb')
+        f = open(filename, 'wb')
         flags = 0x70
         if initially_valid:
             flags = 0x20
@@ -132,9 +132,9 @@ class ELFFile:
             tool_nm = "xtensa-lx106-elf-nm"
             if os.getenv('XTENSA_CORE')=='lx106':
                 tool_nm = "xt-nm"
-            proc = subprocess.Popen([tool_nm, self.name], stdout=subprocess.PIPE)
+            proc = subprocess.Popen([tool_nm, self.name], stdout=subprocess.PIPE, text=True)
         except OSError:
-            print "Error calling "+tool_nm+", do you have Xtensa toolchain in PATH?"
+            print("Error calling "+tool_nm+", do you have Xtensa toolchain in PATH?")
             sys.exit(1)
         for l in proc.stdout:
             fields = l.strip().split()
@@ -149,9 +149,9 @@ class ELFFile:
         if os.getenv('XTENSA_CORE')=='lx106':
             tool_objcopy = "xt-readelf"
         try:
-            proc = subprocess.Popen([tool_readelf, "-h", self.name], stdout=subprocess.PIPE)
+            proc = subprocess.Popen([tool_readelf, "-h", self.name], stdout=subprocess.PIPE, text=True)
         except OSError:
-            print "Error calling "+tool_readelf+", do you have Xtensa toolchain in PATH?"
+            print("Error calling "+tool_readelf+", do you have Xtensa toolchain in PATH?")
             sys.exit(1)
         for l in proc.stdout:
             fields = l.strip().split()
@@ -210,14 +210,14 @@ if __name__ == '__main__':
     if args.operation == 'image_info':
         image = ESPFirmwareImage(args.filename)
         print ('Entry point: %08x' % image.entrypoint) if image.entrypoint != 0 else 'Entry point not set'
-        print '%d segments' % len(image.segments)
-        print
+        print('%d segments' % len(image.segments))
+        print()
         checksum = ESPFirmwareImage.ESP_CHECKSUM_MAGIC
         for (idx, (offset, size, data)) in enumerate(image.segments):
-            print 'Segment %d: %5d bytes at %08x' % (idx+1, size, offset)
+            print('Segment %d: %5d bytes at %08x' % (idx+1, size, offset))
             checksum = ESPFirmwareImage.checksum(data, checksum)
-        print
-        print 'Checksum: %02x (%s)' % (image.checksum, 'valid' if image.checksum == checksum else 'invalid!')
+        print()
+        print('Checksum: %02x (%s)' % image.checksum, 'valid' if image.checksum == checksum else 'invalid!')
 
     elif args.operation == 'elf2image':
         if args.output is None:
