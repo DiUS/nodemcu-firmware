@@ -886,7 +886,16 @@ static int flashfifo_put (lua_State *L)
 
   sample_t s;
   s.timestamp = luaL_checknumber (L, 1);
-  s.value = luaL_checknumber (L, 2);
+  // For some reason, implicit casts from a lua number are *saturating*.
+  // So casting -10 to an uint32_t gives 0, to 2^32-10.
+  // As we don't know whether the intent of a the second argument is
+  // as an unsigned or signed number (that gets decided by the backend),
+  // such behaviour is problematic.
+  // So instead, we do the cast to int64, which can safely hold either,
+  // and then down-cast to uint32, which does not involve saturation.
+  int64_t lv=luaL_checknumber (L, 2);
+  s.value = (uint32_t)lv;
+
   unsigned int decimals = luaL_checknumber (L, 3);
   unsigned int duration = 0;
   const char* mac="local";
