@@ -48,7 +48,9 @@ set(module_srcs
 )
 
 if(CONFIG_NODEMCU_CMODULE_NRFBOOT)
+  list(APPEND embed_files "${COMPONENT_DIR}/nrfboot_start_marker")
   list(APPEND embed_files "${BUILD_DIR}/nrf.bin")
+  list(APPEND embed_files "${COMPONENT_DIR}/nrfboot_end_marker")
 endif()
 
 # Chip specific modules, per module.

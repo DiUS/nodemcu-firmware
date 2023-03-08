@@ -69,6 +69,15 @@ RTC_DATA_ATTR uint64_t fw_checksum = 0;
 extern const uint8_t nrf_bin[]     asm("_binary_nrf_bin_start");
 extern const uint8_t nrf_bin_end[] asm("_binary_nrf_bin_end");
 
+// We might need to find the embedded firmware *outside* this executable
+// For that purpose, unique 15 byte markers are embedded before and after,
+// which can be detected by simply scanning the binary.
+// This module itself has no actual use for them (it can use the symbols
+// provided by the linker to find the firmware); It merely needs to
+// reference them to make sure they are included in the build
+extern const uint8_t nrf_start_marker[]     asm("_binary_nrfboot_start_marker_start");
+extern const uint8_t nrf_end_marker[]       asm("_binary_nrfboot_end_marker_start");
+
 
 #define CRC16_START 0xffff
 static uint16_t crc16 (uint16_t crc, const uint8_t *data, uint16_t length)
@@ -95,6 +104,14 @@ static void init_fw_checksum()
     x = ((x<<17) ^ (x>>23)) + *(p++);
   }
   fw_checksum = x;
+
+  // This never happens. It's just a convenient way to mark
+  // those symbols as "in use" and thus force the markers to
+  // be included in the final output.
+  // The volatile makes the compiler assume the (never-done)
+  // read has side effects, and cannot be optimised away
+  if (nrf_start_marker==nrf_end_marker)
+    *((volatile uint8_t*)nrf_end_marker);
 }
 
 
