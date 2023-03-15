@@ -836,7 +836,8 @@ int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs, uint8_t de
     char *p = namebuf;
     const char *mac =
       flash_fifo_get_dictionary_by_index(s.decimals>>DICTIONARY_SHIFT);
-    while (*mac)
+    int maxmac=sizeof(namebuf)-9;
+    while (*mac && maxmac--)
       *p++ = *mac++;
     *p++ = '-';
     *p++ = device_tag;
@@ -848,6 +849,35 @@ int flash_fifo_fill_s4pp_sample(s4pp_sample_t *sample, uint32_t offs, uint8_t de
     *p++ = '\0';
 
     sample->name = namebuf;
+  }
+
+  if (sample->name) // sanity check actual data entries
+  {
+    bool ok=true;
+    // No non-ASCII or non-visible characters in names
+    const char* n=sample->name;
+    while (*n)
+    {
+      if ((*n)<32 || (*n)>=127)
+        ok=false;
+      n++;
+    }
+    // No ffffffff timestamps
+    if (sample->timestamp==0xffffffffUL)
+      ok=false;
+
+    if (!ok)
+    { // Ouch! Well, this is not going to get better, so we *should* consume
+      // it. However, trying to send something like that to the S4PP server
+      // will either be rejected, or will create random rubbish in the database.
+      //
+      // So we instead return a 1-sized reservation here:
+      sample->val.reservation = 1;
+      sample->type = S4PP_RESERVATION;
+      sample->span = 0;
+      sample->divisor = 1;
+      sample->name = NULL;
+    }
   }
   return n + 1;
 }
