@@ -847,7 +847,7 @@ static void on_commit(s4pp_ctx_t *ctx, bool success, unsigned num_items)
 static int ls4pp_commit(lua_State *L)
 {
   s4pp_userdata_t *sud = get_userdata(L);
-  if (!state_is_active(sud->state) || !sud->state->ctx)
+  if (!state_is_active(sud->state) || !sud->state->ctx || !sud->state->conn)
     return luaL_error(L, "s4pp commit after close");
 
   sud->state->conn->timeout_s = 20;
