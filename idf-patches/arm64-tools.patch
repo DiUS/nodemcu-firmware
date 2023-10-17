@@ -1,0 +1,24 @@
+diff --git i/tools/tools.json w/tools/tools.json
+index 7dddff0d8d..bfbeb54de3 100644
+--- i/tools/tools.json
++++ w/tools/tools.json
+@@ -320,7 +320,8 @@
+         {
+           "install": "never",
+           "platforms": [
+-            "linux-i686"
++            "linux-i686",
++            "linux-arm64"
+           ]
+         }
+       ],
+@@ -381,7 +382,8 @@
+         {
+           "install": "never",
+           "platforms": [
+-            "linux-i686"
++            "linux-i686",
++            "linux-arm64"
+           ]
+         }
+       ],

@@ -23,3 +23,6 @@ bin
 # ignore IDEA files
 .idea
 *.iml
+
+.idf_patched
+.idf_tools_installed
