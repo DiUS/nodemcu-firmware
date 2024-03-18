@@ -137,6 +137,15 @@ typedef struct
   uint8_t  dns_shuffle_count;
 } s4pp_userdata;
 
+typedef struct
+{
+  s4pp_userdata* sud;
+} s4pp_lua_sud;
+
+
+
+
+
 static uint16_t max_batch_size = 0; // "use the server setting"
 
 
@@ -1344,7 +1353,13 @@ static int s4pp_do_upload (lua_State *L)
      xfree (sud);
      return luaL_error (L, "DNS lookup error: %d", res);
   }
-  return 0;
+  s4pp_lua_sud* lsud=(s4pp_lua_sud*)lua_newuserdata(L,sizeof(s4pp_lua_sud));
+  if (!lsud)
+    return luaL_error(L, "not enough memory");
+  luaL_getmetatable(L,"s4pp.meta");
+  lua_setmetatable(L,-2);
+  lsud->sud=sud;
+  return 1;
 
 err:
   if (sud)
@@ -1385,6 +1400,36 @@ static int s4pp_tpedecode( lua_State* L)
   return 1;
 }
 
+static int s4pp_abort(lua_State* L)
+{
+  s4pp_lua_sud* lsud=(s4pp_lua_sud*)luaL_checkudata(L,1,"s4pp.meta");
+  s4pp_userdata* sud=NULL;
+
+  if (lsud)
+  {
+    sud=lsud->sud;
+    if (sud)
+      goto_err_with_msg (sud->L,"Lua abort");
+  }
+  return 0;
+
+err:
+  abort_conn (sud);
+  return 0;
+}
+
+static const LUA_REG_TYPE s4pp_meta_table[]=
+{
+ { LSTRKEY("abort"),         LFUNCVAL(s4pp_abort) },
+ { LSTRKEY( "__index" ),     LROVAL( s4pp_meta_table ) },
+ {LNILKEY,LNILVAL},
+};
+
+int luaopen_s4pp( lua_State *L )
+{
+  luaL_rometatable(L, "s4pp.meta", (void *)s4pp_meta_table);
+}
+
 static const LUA_REG_TYPE s4pp_map[] =
 {
   { LSTRKEY("tpedecode"),     LFUNCVAL(s4pp_tpedecode) },
@@ -1398,4 +1443,4 @@ static const LUA_REG_TYPE s4pp_map[] =
   { LNILKEY, LNILVAL }
 };
 
-NODEMCU_MODULE(S4PP, "s4pp", s4pp_map, NULL);
+NODEMCU_MODULE(S4PP, "s4pp", s4pp_map, luaopen_s4pp);
