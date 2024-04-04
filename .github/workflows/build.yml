@@ -51,7 +51,7 @@ jobs:
         shell: bash
       - name: Build firmware
         run: |
-          make IDF_TARGET=${{ matrix.target }}
+          make IDF_TOOLS_PATH=~/.espressif IDF_TARGET=${{ matrix.target }}
         shell: bash
       - name: Get Lua build options
         run: |
