@@ -1,5 +1,7 @@
 SHELL:=/bin/bash
 
+export IDF_TOOLS_PATH?=$(HOME)/.espressif-r7
+
 ifeq ($(IDF_PATH),)
 
 THIS_MK_FILE:=$(notdir $(lastword $(MAKEFILE_LIST)))

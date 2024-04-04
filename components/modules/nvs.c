@@ -146,6 +146,21 @@ static int lnvs_set(lua_State *L)
 }
 
 
+// Lua: nvs.setstring(key, value)
+static int lnvs_setstring(lua_State *L)
+{
+  const char *key = luaL_checkstring(L, 1);
+  size_t len;
+  const char *blob = luaL_checklstring(L, 2, &len);
+  esp_err_t err = nvs_set_blob(handle, key, blob, len);
+
+  if (err == ESP_OK)
+    err = nvs_commit(handle);
+
+  return check_err(L, err);
+}
+
+
 //Lua: value = nvs.get(key)
 static int lnvs_get(lua_State *L)
 {
@@ -180,6 +195,32 @@ static int lnvs_get(lua_State *L)
     return 1;
   }
 
+  return check_err(L, err);
+}
+
+
+//Lua: value = nvs.getstring(key)
+static int lnvs_getstring(lua_State *L)
+{
+  const char *key = luaL_checkstring(L, 1);
+  size_t needed_len;
+  esp_err_t err = nvs_get_blob(handle, key, NULL, &needed_len);
+  if (err == ESP_OK)
+  {
+    char *blob = luaM_malloc(L, needed_len);
+    size_t len = needed_len;
+    err = nvs_get_blob(handle, key, blob, &len);
+    if (err == ESP_OK)
+      lua_pushlstring(L, blob, len);
+    luaM_freemem(L, blob, needed_len);
+    if (err == ESP_OK)
+      return 1;
+  }
+  else if (err == ESP_ERR_NVS_NOT_FOUND) // Bernie doesn't want to pcall()
+  {
+    lua_pushnil(L);
+    return 1;
+  }
   return check_err(L, err);
 }
 
@@ -219,6 +260,7 @@ static int lnvs_stats(lua_State *L)
   return 3;
 }
 
+
 static int lnvs_makekey(lua_State *L)
 {
   char buf[32];
@@ -227,14 +269,37 @@ static int lnvs_makekey(lua_State *L)
   return 1;
 }
 
+
+// Lua: nvs.forcestring(key)
+static int lnvs_forcestring(lua_State *L)
+{
+  const char *key = luaL_checkstring(L, 1);
+  uint64_t num;
+  esp_err_t err = nvs_get_u64(handle, key, &num);
+  if (err == ESP_OK)
+  {
+    lua_pushnumber(L, (lua_Number)num); // same nasty uint64_t->number hack
+    size_t len;
+    const char *blob = lua_tolstring(L, -1, &len);
+    check_err(L, nvs_erase_key(handle, key));
+    check_err(L, nvs_set_blob(handle, key, blob, len));
+    return check_err(L, nvs_commit(handle));
+  }
+  return 0;
+}
+
+
 LROT_BEGIN(nvs, NULL, 0)
   LROT_FUNCENTRY( init,      lnvs_init )
   LROT_FUNCENTRY( set,       lnvs_set )
+  LROT_FUNCENTRY( setstring, lnvs_setstring )
   LROT_FUNCENTRY( get,       lnvs_get )
+  LROT_FUNCENTRY( getstring, lnvs_getstring )
   LROT_FUNCENTRY( remove,    lnvs_remove )
   LROT_FUNCENTRY( erase,     lnvs_erase )
   LROT_FUNCENTRY( stats,     lnvs_stats )
   LROT_FUNCENTRY( makekey,   lnvs_makekey )
+  LROT_FUNCENTRY( forcestring, lnvs_forcestring )
 LROT_END(nvs, NULL, 0)
 
 NODEMCU_MODULE(NVS, "nvs", nvs, NULL);
