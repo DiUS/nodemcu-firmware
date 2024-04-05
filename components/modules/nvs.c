@@ -48,6 +48,18 @@ _Static_assert(sizeof(lua_Number) <= sizeof(uint64_t), "storage size mismatch");
 
 static nvs_handle handle;
 
+
+// The NVS implementation will happily hold multiple copies of the same key
+// as long as they have different type, but then gets really weird when
+// updating and erasing. Different types and different versions may be
+// uncovered when erasing, so the only safe approach seems to be to keep
+// erasing until no more key copies are found. Sigh.
+static void erase_all_copies(const char *key)
+{
+  while (nvs_erase_key(handle, key) == ESP_OK) {}
+}
+
+
 static int check_err(lua_State *L, esp_err_t err)
 {
   switch (err)
@@ -123,15 +135,26 @@ static int lnvs_set(lua_State *L)
 {
   const char *key = luaL_checkstring(L, 1);
   esp_err_t err;
+#if !defined(CONFIG_LUA_VERSION_51)
+  if (lua_isinteger(L, 2))
+  {
+    int64_t n = lua_tointeger(L, 2);
+    erase_all_copies(key);
+    err = nvs_set_i64(handle, key, n);
+  }
+  else
+#endif
   if (lua_isnumber(L, 2))
   {
-    lua_Number n = lua_tonumber(L, 2);
-    err = nvs_set_u64(handle, key, (uint64_t)n); // nasty double->uint64_t hack
+    int64_t n = (int64_t)lua_tonumber(L, 2); // reduce to integer
+    erase_all_copies(key);
+    err = nvs_set_i64(handle, key, n);
   }
   else if (lua_isstring(L, 2))
   {
     size_t len;
     const char *blob = lua_tolstring(L, 2, &len);
+    erase_all_copies(key);
     err = nvs_set_blob(handle, key, blob, len);
   }
   else
@@ -152,48 +175,11 @@ static int lnvs_setstring(lua_State *L)
   const char *key = luaL_checkstring(L, 1);
   size_t len;
   const char *blob = luaL_checklstring(L, 2, &len);
+  erase_all_copies(key);
   esp_err_t err = nvs_set_blob(handle, key, blob, len);
 
   if (err == ESP_OK)
     err = nvs_commit(handle);
-
-  return check_err(L, err);
-}
-
-
-//Lua: value = nvs.get(key)
-static int lnvs_get(lua_State *L)
-{
-  const char *key = luaL_checkstring(L, 1);
-  uint64_t num;
-  esp_err_t err = nvs_get_u64(handle, key, &num);
-  if (err == ESP_OK)
-  {
-    lua_pushnumber(L, (lua_Number)num); // nasty uint64_t->number hack
-    return 1;
-  }
-  else // I expected ESP_ERR_NVS_TYPE_MISMATCH for this, but got a not-found...
-  {
-    size_t needed_len;
-    err = nvs_get_blob(handle, key, NULL, &needed_len);
-    if (err == ESP_OK)
-    {
-      char *blob = luaM_malloc(L, needed_len);
-      size_t len = needed_len; // don't overwrite needed_len, or bad things(tm)
-      err = nvs_get_blob(handle, key, blob, &len);
-      if (err == ESP_OK) // you'd sure hope it is!
-        lua_pushlstring(L, blob, len);
-      luaM_freemem(L, blob, needed_len);
-      if (err == ESP_OK)
-        return 1;
-    }
-  }
-
-  if (err == ESP_ERR_NVS_NOT_FOUND) // Bernie doesn't want to pcall()
-  {
-    lua_pushnil(L);
-    return 1;
-  }
 
   return check_err(L, err);
 }
@@ -213,8 +199,8 @@ static int lnvs_getstring(lua_State *L)
     if (err == ESP_OK)
       lua_pushlstring(L, blob, len);
     luaM_freemem(L, blob, needed_len);
-    if (err == ESP_OK)
-      return 1;
+    check_err(L, err);
+    return 1;
   }
   else if (err == ESP_ERR_NVS_NOT_FOUND) // Bernie doesn't want to pcall()
   {
@@ -225,20 +211,33 @@ static int lnvs_getstring(lua_State *L)
 }
 
 
+//Lua: value = nvs.get(key)
+static int lnvs_get(lua_State *L)
+{
+  const char *key = luaL_checkstring(L, 1);
+  int64_t inum;
+  if (nvs_get_i64(handle, key, &inum) == ESP_OK)
+  {
+    lua_pushinteger(L, inum);
+    return 1;
+  }
+  uint64_t unum;
+  if (nvs_get_u64(handle, key, &unum) == ESP_OK)
+  {
+    lua_pushinteger(L, unum);
+    return 1;
+  }
+
+  return lnvs_getstring(L);
+}
+
+
 // Lua: nvs.remove(key)
 static int lnvs_remove(lua_State *L)
 {
   const char *key = luaL_checkstring(L, 1);
-  esp_err_t err = nvs_erase_key(handle, key);
-  switch (err)
-  {
-    case ESP_OK: break;
-    case ESP_ERR_NVS_NOT_FOUND: break; // not an error for us
-    default:
-      return check_err(L, err);
-  }
-  err = nvs_commit(handle);
-  return check_err(L, err);
+  erase_all_copies(key);
+  return check_err(L, nvs_commit(handle));
 }
 
 
@@ -261,6 +260,7 @@ static int lnvs_stats(lua_State *L)
 }
 
 
+// This doesn't belong here, but it's here now due to historical reasons
 static int lnvs_makekey(lua_State *L)
 {
   char buf[32];
@@ -274,11 +274,24 @@ static int lnvs_makekey(lua_State *L)
 static int lnvs_forcestring(lua_State *L)
 {
   const char *key = luaL_checkstring(L, 1);
-  uint64_t num;
-  esp_err_t err = nvs_get_u64(handle, key, &num);
+  bool convert = false;
+  uint64_t unum;
+  esp_err_t err = nvs_get_u64(handle, key, &unum);
   if (err == ESP_OK)
   {
-    lua_pushnumber(L, (lua_Number)num); // same nasty uint64_t->number hack
+    lua_pushinteger(L, unum);
+    convert = true;
+  }
+  int64_t inum;
+  err = nvs_get_i64(handle, key, &inum);
+  if (err == ESP_OK)
+  {
+    lua_pushinteger(L, inum);
+    convert = true;
+  }
+
+  if (convert)
+  {
     size_t len;
     const char *blob = lua_tolstring(L, -1, &len);
     check_err(L, nvs_erase_key(handle, key));
