@@ -353,7 +353,7 @@ int platform_uart_start( unsigned id )
   // The default threshold of 120 seems a tad aggressive, and we occasionally get overruns
   // while flash operations are happening. No need to error-check this; It's a best-effort
   // attempt, if it fails, too bad.
-  uart_set_rx_full_threshold(id,100);
+  uart_set_rx_full_threshold(id, 64);
 
   char pcName[6];
   snprintf( pcName, 6, "uart%d", id );
