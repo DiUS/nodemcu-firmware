@@ -294,10 +294,33 @@ static int lnvs_forcestring(lua_State *L)
   {
     size_t len;
     const char *blob = lua_tolstring(L, -1, &len);
-    check_err(L, nvs_erase_key(handle, key));
+    erase_all_copies(key);
     check_err(L, nvs_set_blob(handle, key, blob, len));
     return check_err(L, nvs_commit(handle));
   }
+  else
+  {
+    size_t needed_len;
+    esp_err_t err = nvs_get_blob(handle, key, NULL, &needed_len);
+    if (err == ESP_OK)
+    {
+      size_t len;
+      char *blob = luaM_malloc(L, needed_len);
+      err = nvs_get_blob(handle, key, blob, &len);
+      if (err == ESP_OK && blob[len-1] == '\0')
+      {
+        // Drop a trailing nul-byte (which we introduced as a workaround for
+        // the numeric SSID/passphrase issue).
+        erase_all_copies(key);
+        err = nvs_set_blob(handle, key, blob, len-1);
+        if (err == ESP_OK)
+          err = nvs_commit(handle);
+      }
+      luaM_freemem(L, blob, needed_len);
+      return check_err(L, nvs_commit(handle));
+    }
+  }
+
   return 0;
 }
 
