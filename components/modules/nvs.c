@@ -304,7 +304,7 @@ static int lnvs_forcestring(lua_State *L)
     esp_err_t err = nvs_get_blob(handle, key, NULL, &needed_len);
     if (err == ESP_OK)
     {
-      size_t len;
+      size_t len = needed_len;
       char *blob = luaM_malloc(L, needed_len);
       err = nvs_get_blob(handle, key, blob, &len);
       if (err == ESP_OK && blob[len-1] == '\0')
