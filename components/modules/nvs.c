@@ -317,7 +317,7 @@ static int lnvs_forcestring(lua_State *L)
           err = nvs_commit(handle);
       }
       luaM_freemem(L, blob, needed_len);
-      return check_err(L, nvs_commit(handle));
+      return check_err(L, err);
     }
   }
 
