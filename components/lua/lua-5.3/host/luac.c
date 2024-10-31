@@ -41,10 +41,10 @@ static const char* output=Output;	/* actual output file name */
 static const char* progname=PROGNAME;	/* actual program name */
 static int flash = 0;			/* output flash image */
 static lu_int32 address = 0;		/* output flash image at absolute location */
-static lu_int32 maxSize = 0x40000;	/* maximuum uncompressed image size */
 static int lookup = 0;			/* output lookup-style master combination header */
 static const char *execute;		/* executed a Lua file */
 char *LFSimageName;
+uint32_t LFSmaxSize = 0x40000;	/* maximum uncompressed image size */
 
 #if 0
 #define IROM0_SEG    0x40200000ul
@@ -133,8 +133,8 @@ static int doargs(int argc, char *argv[]) {
       ++listing;
     } else if (IS("-m")) {                    /* specify a maximum image size */
       flash = lookup = 1;
-      maxSize = strtol(argv[++i], NULL, 0);
-      if (maxSize & 0xFFF)
+      LFSmaxSize = strtol(argv[++i], NULL, 0);
+      if (LFSmaxSize & 0xFFF)
         usage("\"-m\" maximum size must be a multiple of 4,096");
     } else if (IS("-o")) {                                     /* output file */
       output = argv[++i];
@@ -321,7 +321,6 @@ static int pmain(lua_State *L) {
     lua_lock(L);
     if (flash) {
       UNUSED(address);
-      UNUSED(maxSize);
       result = luaU_DumpAllProtos(L, f, writer, &D, stripping);
     } else {
       result = luaU_dump(L, f, writer, cast(void *, &D), stripping);

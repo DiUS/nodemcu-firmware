@@ -109,7 +109,6 @@ extern void dbg_printf(const char *fmt, ...);                // DEBUG
 ** them in a host execution environment will result in an address exception.
 */
 #define PLATFORM_RCR_FLASHLFS  4
-#define LFS_SIZE         0x40000
 #define FLASH_PAGE_SIZE   0x1000
 #define FLASH_BASE       0x90000           /* Some 'Random' but typical value */
 
@@ -117,13 +116,14 @@ void         *LFSregion = NULL;
 static void  *LFSaddr   = NULL;
 static size_t LFSbase   = FLASH_BASE;
 extern char  *LFSimageName;
+extern uint32_t LFSmaxSize;
 
 #ifdef __unix__
 /* On POSIX systems we can toggle the "Flash" write attribute */
 #include <sys/mman.h>
 #define aligned_malloc(a,n) posix_memalign(&a, FLASH_PAGE_SIZE, (n))
-#define unlockFlashWrite() mprotect(LFSaddr, LFS_SIZE, PROT_READ| PROT_WRITE)
-#define lockFlashWrite() mprotect(LFSaddr, LFS_SIZE, PROT_READ)
+#define unlockFlashWrite() mprotect(LFSaddr, LFSmaxSize, PROT_READ| PROT_WRITE)
+#define lockFlashWrite() mprotect(LFSaddr, LFSmaxSize, PROT_READ)
 #else
 #define aligned_malloc(a,n) ((a = malloc(n)) == NULL)
 #define unlockFlashWrite()
@@ -140,15 +140,15 @@ void luaN_setabsolute(lu_int32 addr) {
 bool lfs_get_location(lfs_location_info_t *out)
 {
   if (!LFSregion) {
-    if(aligned_malloc(LFSregion, LFS_SIZE))
+    if(aligned_malloc(LFSregion, LFSmaxSize))
       return false;
-    memset(LFSregion, ~0, LFS_SIZE);
+    memset(LFSregion, ~0, LFSmaxSize);
     lockFlashWrite();
   }
   if(LFSaddr == NULL)
     LFSaddr = LFSregion;
 
-  out->size = LFS_SIZE;
+  out->size = LFSmaxSize;
   out->addr_mem = LFSaddr;
   out->addr_phys = LFSbase;
   return true;
@@ -171,14 +171,14 @@ bool lfs_clear_load_filename(void)
 
 static void platform_flash_erase_sector(lu_int32 i) {
   lua_assert (i >= LFSbase/FLASH_PAGE_SIZE &&
-              i < (LFSbase+LFS_SIZE)/FLASH_PAGE_SIZE);
+              i < (LFSbase+LFSmaxSize)/FLASH_PAGE_SIZE);
   unlockFlashWrite();
   memset(byteptr(LFSregion) + (i*FLASH_PAGE_SIZE - LFSbase), ~(0), FLASH_PAGE_SIZE);
   lockFlashWrite();
 }
 
 static void platform_flash_write(const void *from, lu_int32 to, lu_int32 len) {
-  lua_assert(to >= LFSbase && to + len < LFSbase + LFS_SIZE);  /* DEBUG */
+  lua_assert(to >= LFSbase && to + len < LFSbase + LFSmaxSize);  /* DEBUG */
   unlockFlashWrite();
   memcpy(byteptr(LFSregion) + (to-LFSbase), from, len);
   lockFlashWrite();
