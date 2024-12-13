@@ -56,6 +56,7 @@ pages:
       - 'i2c': 'modules/i2c.md'
       - 'i2s': 'modules/i2s.md'
       - 'ledc': 'modules/ledc.md'
+      - 'mdns': 'modules/mdns.md'
       - 'mqtt': 'modules/mqtt.md'
       - 'net': 'modules/net.md'
       - 'node': 'modules/node.md'
